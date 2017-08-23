@@ -1,4 +1,4 @@
-# Probabilistic thresholding of functional connectome
+# Probabilistic thresholding of functional connectomes
 
 The code in this repository reproduces most analyses and figures (with the exception of certain supplementary analyses) conducted in the manuscript "**Probabilistic thresholding of functional connectomes: application to schizophrenia**" by František Váša et al.
 
