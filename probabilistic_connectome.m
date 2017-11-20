@@ -323,7 +323,7 @@ nedge_max = (nroi*(nroi-1)/2);
 for i = 1:1:nc
     if mod(i,10) == 0; disp(['ctrl ' num2str(i)]); end
     cmp=0;
-    temp_p = ctrl.fdr(:,:,i); %ctrl.did(i)
+    temp_p = ctrl.fdr(:,:,i);
     [b,ix] = sort(temp_p(triu_ind),'ascend'); % sort edges by value
     [row,col] = ind2sub([nroi,nroi],triu_ind(ix(1:nedge_max)));
     % fill new matrix
@@ -352,7 +352,7 @@ end
 for i = 1:1:nc
     if mod(i,10) == 0; disp(['ctrl ' num2str(i)]); end
     cmp=0;
-    temp_p = ctrl.fdr(:,:,i); %ctrl.did(i)
+    temp_p = ctrl.fdr(:,:,i);
     [b,ix] = sort(temp_p(triu_ind),'ascend'); % sort edges by value
     [row,col] = ind2sub([nroi,nroi],triu_ind(ix(1:nedge_max)));
     % fill new matrix
@@ -464,7 +464,14 @@ for d = 1:1:ndens
     
     % loop over all subjects - later distinguish significant + nonsignificant when comparing topology
     for i = 1:1:nc
-        temp_p = ctrl.fdr(:,:,i);
+        %%% this code ensures that only positive edges are considered
+        % if wishing to consider negative edges, replace by commented-out line
+        t_p = ctrl.fdr(:,:,i);
+        t_r = ctrl.r(:,:,i);
+        temp_p = nan(nroi);
+        temp_p(t_r>0) = t_p(t_r>0);
+        %temp_p = ctrl.fdr(:,:,i); % if wishing to consider negative edges
+        %%%
         [b,ix] = sort(temp_p(triu_ind),'ascend');                   % sort edges by value
         [row,col] = ind2sub([nroi,nroi],triu_ind(ix(1:nedge_all))); % indices of edges to be added (up to nedge_all)
         % fill new matrix
@@ -487,7 +494,14 @@ for d = 1:1:ndens
     end
     
     for i = 1:1:np
-        temp_p = schz.fdr(:,:,i);
+        %%% this code ensures that only positive edges are considered
+        % if wishing to consider negative edges, replace by commented-out line
+        t_p = schz.fdr(:,:,i);
+        t_r = schz.r(:,:,i);
+        temp_p = nan(nroi);
+        temp_p(t_r>0) = t_p(t_r>0);
+        %temp_p = schz.fdr(:,:,i); % if wishing to consider negative edges
+        %%%
         [b,ix] = sort(temp_p(triu_ind),'ascend');                   % sort edges by value
         [row,col] = ind2sub([nroi,nroi],triu_ind(ix(1:nedge_all))); % indices of edges to be added (up to nedge_all)
         % fill new matrix
@@ -511,13 +525,87 @@ for d = 1:1:ndens
     
 end
 
-% find subject numbers between which ratios of "significant"/"unsignificant" participants cross 3:1 / 1:3
+%% sets of participants: "significant", and "P<1" 
+
+% edge density when P->1
 % ctrl
-ctrl.r3to1(1) = min(find(cellfun('length',ctrl.did)<nc*(3/4)))-0.5;
-ctrl.r3to1(2) = min(find(cellfun('length',ctrl.did)<nc*(1/4)))-0.5;
+%ctrl.p1_dens = nan(nc,1);
+for i = 1:nc
+    %%%
+    t_p = ctrl.fdr(:,:,i);
+    t_r = ctrl.r(:,:,i);
+    temp_p = nan(nroi);
+    temp_p(t_r>0) = t_p(t_r>0);
+    %%%
+    temp_p(temp_p==1)=NaN;
+    ctrl.p1_dens(i) = 100*sum(~isnan(temp_p(triu_ind)))/(nroi*(nroi-1)/2);
+end
+
 % schz
-schz.r3to1(1) = min(find(cellfun('length',schz.did)<np*(3/4)))-0.5;
-schz.r3to1(2) = min(find(cellfun('length',schz.did)<np*(1/4)))-0.5; 
+%schz.p1_dens = nan(np,1);
+for i = 1:np
+    %%%
+    t_p = schz.fdr(:,:,i);
+    t_r = schz.r(:,:,i);
+    temp_p = nan(nroi);
+    temp_p(t_r>0) = t_p(t_r>0);
+    %%%
+    temp_p(temp_p==1)=NaN;
+    schz.p1_dens(i) = 100*sum(~isnan(temp_p(triu_ind)))/(nroi*(nroi-1)/2);
+end
+
+for d = 1:1:ndens
+
+    % significant subjects
+    ctrl.sig_id{d} = find(ctrl.dens > d/100);
+    schz.sig_id{d} = find(schz.dens > d/100);
+    
+    % subjects with P<1
+    ctrl.psub1_id{d} = find(ctrl.p1_dens > d);
+    schz.psub1_id{d} = find(schz.p1_dens > d);
+    
+end
+
+% numbers of subjects in each group as a function of density
+ctrl.sig_count = cellfun('length',ctrl.sig_id);
+ctrl.psub1_count = cellfun('length',ctrl.psub1_id);
+
+schz.sig_count = cellfun('length',schz.sig_id);
+schz.psub1_count = cellfun('length',schz.psub1_id);
+    
+% % find subject numbers between which ratios of sig/unsig cross 3:1 / 1:3
+% %cellfun('length',ctrl.sig_id)
+% ctrl.r3to1(1) = min(find(cellfun('length',ctrl.sig_id)<nc*(3/4)))-0.5;
+% ctrl.r3to1(2) = min(find(cellfun('length',ctrl.sig_id)<nc*(1/4)))-0.5;
+% %cellfun('length',schz.sig_id)
+% schz.r3to1(1) = min(find(cellfun('length',schz.sig_id)<np*(3/4)))-0.5;
+% schz.r3to1(2) = min(find(cellfun('length',schz.sig_id)<np*(1/4)))-0.5; 
+
+%% drop off curves - include "sig" and "P<1"
+
+figure;
+hold on
+% "sig"
+plot(1:ndens,ctrl.sig_count(1:ndens),'Color',ctrl.col,'LineWidth',1);
+plot(1:ndens,schz.sig_count(1:ndens),'Color',schz.col,'LineWidth',1);
+scatter(1:ndens,ctrl.sig_count(1:ndens),26,'MarkerFaceColor',ctrl.col,'MarkerEdgeColor',ctrl.col); 
+scatter(1:ndens,schz.sig_count(1:ndens),26,'MarkerFaceColor',schz.col,'MarkerEdgeColor',schz.col);
+% P<1
+plot(1:ndens,ctrl.psub1_count(1:ndens),'-.','Color',ctrl.col,'LineWidth',1);
+plot(1:ndens,schz.psub1_count(1:ndens),'-.','Color',schz.col,'LineWidth',1);
+hold off
+
+set(gca,'FontSize',fsize2); box off
+xlabel('edge density \rho (%)','FontSize',fsize,'FontName','Arial');
+ylabel('# participants','FontSize',fsize,'FontName','Arial');
+
+pos = get(gcf,'Position');
+set(gcf,'Position', [pos(1) pos(2) 1.25*pos(3) 0.70*pos(4)]); set(gcf,'color','w');
+
+xlim([0 ndens+1]); 
+set(gca,'YTick',[0,40,80])
+
+print([plot_path 'drop_off_sc' sc '_alpha' num2str(100*alpha) '.png'],'-dpng')
 
 %% %%%%%%%%%% compare topological measures across densities - P-THRESHOLD %%%%%%%%
 
@@ -537,7 +625,7 @@ for i = 1:1:ndens
     % all subjects
     % ctrl
     ctrl.m_eff(i) = median(ctrl.eff(:,i));
-    ctrl.ci_eff(i,:) = abs(prctile(ctrl.eff(:,i),[prct_l prct_h])-ctrl.m_eff(i)); 
+    ctrl.ci_eff(i,:) = abs(prctile(ctrl.eff(:,i),[prct_l prct_h])-ctrl.m_eff(i));
     ctrl.m_trans(i) = median(ctrl.trans(:,i));
     ctrl.ci_trans(i,:) = abs(prctile(ctrl.trans(:,i),[prct_l prct_h])-ctrl.m_trans(i));
     ctrl.m_dcmp_n(i) = median(ctrl.dcmp_n(:,i));
@@ -562,136 +650,238 @@ for i = 1:1:ndens
     
     % significant subjects
     % ctrl
-    ctrl.m_eff_sig(i) = median(ctrl.eff(ctrl.did{i},i));
-    ctrl.ci_eff_sig(i,:) = abs(prctile(ctrl.eff(ctrl.did{i},i),[prct_l prct_h])-ctrl.m_eff_sig(i));
-    ctrl.m_trans_sig(i) = median(ctrl.trans(ctrl.did{i},i));
-    ctrl.ci_trans_sig(i,:) = abs(prctile(ctrl.trans(ctrl.did{i},i),[prct_l prct_h])-ctrl.m_trans_sig(i));
-    ctrl.m_dcmp_n_sig(i) = median(ctrl.dcmp_n(ctrl.did{i},i));
-    ctrl.ci_dcmp_n_sig(i,:) = abs(prctile(ctrl.dcmp_n(ctrl.did{i},i),[prct_l prct_h])-ctrl.m_dcmp_n_sig(i));
-    ctrl.m_dcmp_max_sig(i) = median(ctrl.dcmp_max(ctrl.did{i},i));
-    ctrl.ci_dcmp_max_sig(i,:) = abs(prctile(ctrl.dcmp_max(ctrl.did{i},i),[prct_l prct_h])-ctrl.m_dcmp_max_sig(i));
+    ctrl.m_eff_sig(i) = median(ctrl.eff(ctrl.sig_id{i},i));
+    ctrl.ci_eff_sig(i,:) = abs(prctile(ctrl.eff(ctrl.sig_id{i},i),[prct_l prct_h])-ctrl.m_eff_sig(i));
+    ctrl.m_trans_sig(i) = median(ctrl.trans(ctrl.sig_id{i},i));
+    ctrl.ci_trans_sig(i,:) = abs(prctile(ctrl.trans(ctrl.sig_id{i},i),[prct_l prct_h])-ctrl.m_trans_sig(i));
+    ctrl.m_dcmp_n_sig(i) = median(ctrl.dcmp_n(ctrl.sig_id{i},i));
+    ctrl.ci_dcmp_n_sig(i,:) = abs(prctile(ctrl.dcmp_n(ctrl.sig_id{i},i),[prct_l prct_h])-ctrl.m_dcmp_n_sig(i));
+    ctrl.m_dcmp_max_sig(i) = median(ctrl.dcmp_max(ctrl.sig_id{i},i));
+    ctrl.ci_dcmp_max_sig(i,:) = abs(prctile(ctrl.dcmp_max(ctrl.sig_id{i},i),[prct_l prct_h])-ctrl.m_dcmp_max_sig(i));
+    %%%
+    ctrl.m_avg_wei_sig(i) = median(ctrl.avg_wei(ctrl.sig_id{i}));
+    ctrl.ci_avg_wei_sig(i,:) = abs(prctile(ctrl.avg_wei(ctrl.sig_id{i}),[prct_l prct_h])-ctrl.m_avg_wei_sig(i));
+    %%%
     % schz
-    schz.m_eff_sig(i) = median(schz.eff(schz.did{i},i));
-    schz.ci_eff_sig(i,:) = abs(prctile(schz.eff(schz.did{i},i),[prct_l prct_h])-schz.m_eff_sig(i));
-    schz.m_trans_sig(i) = median(schz.trans(schz.did{i},i));
-    schz.ci_trans_sig(i,:) = abs(prctile(schz.trans(schz.did{i},i),[prct_l prct_h])-schz.m_trans_sig(i));
-    schz.m_dcmp_n_sig(i) = median(schz.dcmp_n(schz.did{i},i));
-    schz.ci_dcmp_n_sig(i,:) = abs(prctile(schz.dcmp_n(schz.did{i},i),[prct_l prct_h])-schz.m_dcmp_n_sig(i));
-    schz.m_dcmp_max_sig(i) = median(schz.dcmp_max(schz.did{i},i));
-    schz.ci_dcmp_max_sig(i,:) = abs(prctile(schz.dcmp_max(schz.did{i},i),[prct_l prct_h])-schz.m_dcmp_max_sig(i));
+    schz.m_eff_sig(i) = median(schz.eff(schz.sig_id{i},i));
+    schz.ci_eff_sig(i,:) = abs(prctile(schz.eff(schz.sig_id{i},i),[prct_l prct_h])-schz.m_eff_sig(i));
+    schz.m_trans_sig(i) = median(schz.trans(schz.sig_id{i},i));
+    schz.ci_trans_sig(i,:) = abs(prctile(schz.trans(schz.sig_id{i},i),[prct_l prct_h])-schz.m_trans_sig(i));
+    schz.m_dcmp_n_sig(i) = median(schz.dcmp_n(schz.sig_id{i},i));
+    schz.ci_dcmp_n_sig(i,:) = abs(prctile(schz.dcmp_n(schz.sig_id{i},i),[prct_l prct_h])-schz.m_dcmp_n_sig(i));
+    schz.m_dcmp_max_sig(i) = median(schz.dcmp_max(schz.sig_id{i},i));
+    schz.ci_dcmp_max_sig(i,:) = abs(prctile(schz.dcmp_max(schz.sig_id{i},i),[prct_l prct_h])-schz.m_dcmp_max_sig(i));
+    %%%
+    schz.m_avg_wei_sig(i) = median(schz.avg_wei(schz.sig_id{i}));
+    schz.ci_avg_wei_sig(i,:) = abs(prctile(schz.avg_wei(schz.sig_id{i}),[prct_l prct_h])-schz.m_avg_wei_sig(i));
+    %%%
     
     % ranksum across densities
-    p_eff_sig(i) = ranksum(ctrl.eff(ctrl.did{i},i),schz.eff(schz.did{i},i));
-    p_trans_sig(i) = ranksum(ctrl.trans(ctrl.did{i},i),schz.trans(schz.did{i},i));
-    p_dcmp_n_sig(i) = ranksum(ctrl.dcmp_n(ctrl.did{i},i),schz.dcmp_n(schz.did{i},i));
-    p_dcmp_max_sig(i) = ranksum(ctrl.dcmp_max(ctrl.did{i},i),schz.dcmp_max(schz.did{i},i));
+    p_eff_sig(i) = ranksum(ctrl.eff(ctrl.sig_id{i},i),schz.eff(schz.sig_id{i},i));
+    p_trans_sig(i) = ranksum(ctrl.trans(ctrl.sig_id{i},i),schz.trans(schz.sig_id{i},i));
+    p_dcmp_n_sig(i) = ranksum(ctrl.dcmp_n(ctrl.sig_id{i},i),schz.dcmp_n(schz.sig_id{i},i));
+    p_dcmp_max_sig(i) = ranksum(ctrl.dcmp_max(ctrl.sig_id{i},i),schz.dcmp_max(schz.sig_id{i},i));
+    %%%
+    p_avg_wei_sig(i) = ranksum(ctrl.avg_wei(ctrl.sig_id{i}),schz.avg_wei(schz.sig_id{i}));
+    %%%
+    
+    % subjects with P<1
+    % ctrl
+    ctrl.m_eff_psub1(i) = median(ctrl.eff(ctrl.psub1_id{i},i));
+    ctrl.ci_eff_psub1(i,:) = abs(prctile(ctrl.eff(ctrl.psub1_id{i},i),[prct_l prct_h])-ctrl.m_eff_psub1(i));
+    ctrl.m_trans_psub1(i) = median(ctrl.trans(ctrl.psub1_id{i},i));
+    ctrl.ci_trans_psub1(i,:) = abs(prctile(ctrl.trans(ctrl.psub1_id{i},i),[prct_l prct_h])-ctrl.m_trans_psub1(i));
+    ctrl.m_dcmp_n_psub1(i) = median(ctrl.dcmp_n(ctrl.psub1_id{i},i));
+    ctrl.ci_dcmp_n_psub1(i,:) = abs(prctile(ctrl.dcmp_n(ctrl.psub1_id{i},i),[prct_l prct_h])-ctrl.m_dcmp_n_psub1(i));
+    ctrl.m_dcmp_max_psub1(i) = median(ctrl.dcmp_max(ctrl.psub1_id{i},i));
+    ctrl.ci_dcmp_max_psub1(i,:) = abs(prctile(ctrl.dcmp_max(ctrl.psub1_id{i},i),[prct_l prct_h])-ctrl.m_dcmp_max_psub1(i));
+    %%%
+    ctrl.m_avg_wei_psub1(i) = median(ctrl.avg_wei(ctrl.psub1_id{i}));
+    ctrl.ci_avg_wei_psub1(i,:) = abs(prctile(ctrl.avg_wei(ctrl.psub1_id{i}),[prct_l prct_h])-ctrl.m_avg_wei_psub1(i));
+    %%%
+    % schz
+    schz.m_eff_psub1(i) = median(schz.eff(schz.psub1_id{i},i));
+    schz.ci_eff_psub1(i,:) = abs(prctile(schz.eff(schz.psub1_id{i},i),[prct_l prct_h])-schz.m_eff_psub1(i));
+    schz.m_trans_psub1(i) = median(schz.trans(schz.psub1_id{i},i));
+    schz.ci_trans_psub1(i,:) = abs(prctile(schz.trans(schz.psub1_id{i},i),[prct_l prct_h])-schz.m_trans_psub1(i));
+    schz.m_dcmp_n_psub1(i) = median(schz.dcmp_n(schz.psub1_id{i},i));
+    schz.ci_dcmp_n_psub1(i,:) = abs(prctile(schz.dcmp_n(schz.psub1_id{i},i),[prct_l prct_h])-schz.m_dcmp_n_psub1(i));
+    schz.m_dcmp_max_psub1(i) = median(schz.dcmp_max(schz.psub1_id{i},i));
+    schz.ci_dcmp_max_psub1(i,:) = abs(prctile(schz.dcmp_max(schz.psub1_id{i},i),[prct_l prct_h])-schz.m_dcmp_max_psub1(i));
+    %%%
+    schz.m_avg_wei_psub1(i) = median(schz.avg_wei(schz.psub1_id{i}));
+    schz.ci_avg_wei_psub1(i,:) = abs(prctile(schz.avg_wei(schz.psub1_id{i}),[prct_l prct_h])-schz.m_avg_wei_psub1(i));
+    %%%
+    
+    % ranksum across densities
+    p_eff_psub1(i) = ranksum(ctrl.eff(ctrl.psub1_id{i},i),schz.eff(schz.psub1_id{i},i));
+    p_trans_psub1(i) = ranksum(ctrl.trans(ctrl.psub1_id{i},i),schz.trans(schz.psub1_id{i},i));
+    p_dcmp_n_psub1(i) = ranksum(ctrl.dcmp_n(ctrl.psub1_id{i},i),schz.dcmp_n(schz.psub1_id{i},i));
+    p_dcmp_max_psub1(i) = ranksum(ctrl.dcmp_max(ctrl.psub1_id{i},i),schz.dcmp_max(schz.psub1_id{i},i));
+    %%%
+    p_avg_wei_psub1(i) = ranksum(ctrl.avg_wei(ctrl.psub1_id{i}),schz.avg_wei(schz.psub1_id{i}));
+    %%%
+    
+    % subjects with P<1 (but P>0.01) (pint = p-intermediate)
+    % ctrl
+    ctrl.m_eff_pint(i) = median(ctrl.eff(setdiff(ctrl.psub1_id{i},ctrl.sig_id{i}),i));
+    ctrl.ci_eff_pint(i,:) = abs(prctile(ctrl.eff(setdiff(ctrl.psub1_id{i},ctrl.sig_id{i}),i),[prct_l prct_h])-ctrl.m_eff_pint(i));
+    ctrl.m_trans_pint(i) = median(ctrl.trans(setdiff(ctrl.psub1_id{i},ctrl.sig_id{i}),i));
+    ctrl.ci_trans_pint(i,:) = abs(prctile(ctrl.trans(setdiff(ctrl.psub1_id{i},ctrl.sig_id{i}),i),[prct_l prct_h])-ctrl.m_trans_pint(i));
+    ctrl.m_dcmp_n_pint(i) = median(ctrl.dcmp_n(setdiff(ctrl.psub1_id{i},ctrl.sig_id{i}),i));
+    ctrl.ci_dcmp_n_pint(i,:) = abs(prctile(ctrl.dcmp_n(setdiff(ctrl.psub1_id{i},ctrl.sig_id{i}),i),[prct_l prct_h])-ctrl.m_dcmp_n_pint(i));
+    ctrl.m_dcmp_max_pint(i) = median(ctrl.dcmp_max(setdiff(ctrl.psub1_id{i},ctrl.sig_id{i}),i));
+    ctrl.ci_dcmp_max_pint(i,:) = abs(prctile(ctrl.dcmp_max(setdiff(ctrl.psub1_id{i},ctrl.sig_id{i}),i),[prct_l prct_h])-ctrl.m_dcmp_max_pint(i));
+    %%%
+    ctrl.m_avg_wei_pint(i) = median(ctrl.avg_wei(setdiff(ctrl.psub1_id{i},ctrl.sig_id{i})));
+    ctrl.ci_avg_wei_pint(i,:) = abs(prctile(ctrl.avg_wei(setdiff(ctrl.psub1_id{i},ctrl.sig_id{i})),[prct_l prct_h])-ctrl.m_avg_wei_pint(i));
+    %%%
+    % schz
+    schz.m_eff_pint(i) = median(schz.eff(setdiff(schz.psub1_id{i},schz.sig_id{i}),i));
+    schz.ci_eff_pint(i,:) = abs(prctile(schz.eff(setdiff(schz.psub1_id{i},schz.sig_id{i}),i),[prct_l prct_h])-schz.m_eff_pint(i));
+    schz.m_trans_pint(i) = median(schz.trans(setdiff(schz.psub1_id{i},schz.sig_id{i}),i));
+    schz.ci_trans_pint(i,:) = abs(prctile(schz.trans(setdiff(schz.psub1_id{i},schz.sig_id{i}),i),[prct_l prct_h])-schz.m_trans_pint(i));
+    schz.m_dcmp_n_pint(i) = median(schz.dcmp_n(setdiff(schz.psub1_id{i},schz.sig_id{i}),i));
+    schz.ci_dcmp_n_pint(i,:) = abs(prctile(schz.dcmp_n(setdiff(schz.psub1_id{i},schz.sig_id{i}),i),[prct_l prct_h])-schz.m_dcmp_n_pint(i));
+    schz.m_dcmp_max_pint(i) = median(schz.dcmp_max(setdiff(schz.psub1_id{i},schz.sig_id{i}),i));
+    schz.ci_dcmp_max_pint(i,:) = abs(prctile(schz.dcmp_max(setdiff(schz.psub1_id{i},schz.sig_id{i}),i),[prct_l prct_h])-schz.m_dcmp_max_pint(i));
+    %%%
+    schz.m_avg_wei_pint(i) = median(schz.avg_wei(setdiff(schz.psub1_id{i},schz.sig_id{i})));
+    schz.ci_avg_wei_pint(i,:) = abs(prctile(schz.avg_wei(setdiff(schz.psub1_id{i},schz.sig_id{i})),[prct_l prct_h])-schz.m_avg_wei_pint(i));
+    %%%
     
     % non-significant subjects
     % ctrl
-    ctrl.m_eff_nonsig(i) = median(ctrl.eff(setdiff(1:nc,ctrl.did{i}),i));
-    ctrl.ci_eff_nonsig(i,:) = abs(prctile(ctrl.eff(setdiff(1:nc,ctrl.did{i}),i),[prct_l prct_h])-ctrl.m_eff_nonsig(i));
-    ctrl.m_trans_nonsig(i) = median(ctrl.trans(setdiff(1:nc,ctrl.did{i}),i));
-    ctrl.ci_trans_nonsig(i,:) = abs(prctile(ctrl.trans(setdiff(1:nc,ctrl.did{i}),i),[prct_l prct_h])-ctrl.m_trans_nonsig(i));
-    ctrl.m_dcmp_n_nonsig(i) = median(ctrl.dcmp_n(setdiff(1:nc,ctrl.did{i}),i));
-    ctrl.ci_dcmp_n_nonsig(i,:) = abs(prctile(ctrl.dcmp_n(setdiff(1:nc,ctrl.did{i}),i),[prct_l prct_h])-ctrl.m_dcmp_n_nonsig(i));
-    ctrl.m_dcmp_max_nonsig(i) = median(ctrl.dcmp_max(setdiff(1:nc,ctrl.did{i}),i));
-    ctrl.ci_dcmp_max_nonsig(i,:) = abs(prctile(ctrl.dcmp_max(setdiff(1:nc,ctrl.did{i}),i),[prct_l prct_h])-ctrl.m_dcmp_max_nonsig(i));
+    ctrl.m_eff_nonsig(i) = median(ctrl.eff(setdiff(1:nc,ctrl.sig_id{i}),i));
+    ctrl.ci_eff_nonsig(i,:) = abs(prctile(ctrl.eff(setdiff(1:nc,ctrl.sig_id{i}),i),[prct_l prct_h])-ctrl.m_eff_nonsig(i));
+    ctrl.m_trans_nonsig(i) = median(ctrl.trans(setdiff(1:nc,ctrl.sig_id{i}),i));
+    ctrl.ci_trans_nonsig(i,:) = abs(prctile(ctrl.trans(setdiff(1:nc,ctrl.sig_id{i}),i),[prct_l prct_h])-ctrl.m_trans_nonsig(i));
+    ctrl.m_dcmp_n_nonsig(i) = median(ctrl.dcmp_n(setdiff(1:nc,ctrl.sig_id{i}),i));
+    ctrl.ci_dcmp_n_nonsig(i,:) = abs(prctile(ctrl.dcmp_n(setdiff(1:nc,ctrl.sig_id{i}),i),[prct_l prct_h])-ctrl.m_dcmp_n_nonsig(i));
+    ctrl.m_dcmp_max_nonsig(i) = median(ctrl.dcmp_max(setdiff(1:nc,ctrl.sig_id{i}),i));
+    ctrl.ci_dcmp_max_nonsig(i,:) = abs(prctile(ctrl.dcmp_max(setdiff(1:nc,ctrl.sig_id{i}),i),[prct_l prct_h])-ctrl.m_dcmp_max_nonsig(i));
+    %%%
+    ctrl.m_avg_wei_nonsig(i) = median(ctrl.avg_wei(setdiff(1:nc,ctrl.sig_id{i})));
+    ctrl.ci_avg_wei_nonsig(i,:) = abs(prctile(ctrl.avg_wei(setdiff(1:nc,ctrl.sig_id{i})),[prct_l prct_h])-ctrl.m_avg_wei_nonsig(i));
+    %%%
     % schz
-    schz.m_eff_nonsig(i) = median(schz.eff(setdiff(1:np,schz.did{i}),i));
-    schz.ci_eff_nonsig(i,:) = abs(prctile(schz.eff(setdiff(1:np,schz.did{i}),i),[prct_l prct_h])-schz.m_eff_nonsig(i));
-    schz.m_trans_nonsig(i) = median(schz.trans(setdiff(1:np,schz.did{i}),i));
-    schz.ci_trans_nonsig(i,:) = abs(prctile(schz.trans(setdiff(1:np,schz.did{i}),i),[prct_l prct_h])-schz.m_trans_nonsig(i));
-    schz.m_dcmp_n_nonsig(i) = median(schz.dcmp_n(setdiff(1:np,schz.did{i}),i));
-    schz.ci_dcmp_n_nonsig(i,:) = abs(prctile(schz.dcmp_n(setdiff(1:np,schz.did{i}),i),[prct_l prct_h])-schz.m_dcmp_n_nonsig(i));
-    schz.m_dcmp_max_nonsig(i) = median(schz.dcmp_max(setdiff(1:np,schz.did{i}),i));
-    schz.ci_dcmp_max_nonsig(i,:) = abs(prctile(schz.dcmp_max(setdiff(1:np,schz.did{i}),i),[prct_l prct_h])-schz.m_dcmp_max_nonsig(i));
-    
-    % ranksum across densities
-    if ~isempty(setdiff(1:nc,ctrl.did{i}))
-        p_eff_ctrl(i) = ranksum(ctrl.eff(setdiff(1:nc,ctrl.did{i}),i),ctrl.eff(ctrl.did{i},i));
-        p_trans_ctrl(i) = ranksum(ctrl.trans(setdiff(1:nc,ctrl.did{i}),i),ctrl.trans(ctrl.did{i},i));
-        p_dcmp_n_ctrl(i) = ranksum(ctrl.dcmp_n(setdiff(1:nc,ctrl.did{i}),i),ctrl.dcmp_n(ctrl.did{i},i));
-        p_dcmp_max_ctrl(i) = ranksum(ctrl.dcmp_max(setdiff(1:nc,ctrl.did{i}),i),ctrl.dcmp_max(ctrl.did{i},i));
+    schz.m_eff_nonsig(i) = median(schz.eff(setdiff(1:np,schz.sig_id{i}),i));
+    schz.ci_eff_nonsig(i,:) = abs(prctile(schz.eff(setdiff(1:np,schz.sig_id{i}),i),[prct_l prct_h])-schz.m_eff_nonsig(i));
+    schz.m_trans_nonsig(i) = median(schz.trans(setdiff(1:np,schz.sig_id{i}),i));
+    schz.ci_trans_nonsig(i,:) = abs(prctile(schz.trans(setdiff(1:np,schz.sig_id{i}),i),[prct_l prct_h])-schz.m_trans_nonsig(i));
+    schz.m_dcmp_n_nonsig(i) = median(schz.dcmp_n(setdiff(1:np,schz.sig_id{i}),i));
+    schz.ci_dcmp_n_nonsig(i,:) = abs(prctile(schz.dcmp_n(setdiff(1:np,schz.sig_id{i}),i),[prct_l prct_h])-schz.m_dcmp_n_nonsig(i));
+    schz.m_dcmp_max_nonsig(i) = median(schz.dcmp_max(setdiff(1:np,schz.sig_id{i}),i));
+    schz.ci_dcmp_max_nonsig(i,:) = abs(prctile(schz.dcmp_max(setdiff(1:np,schz.sig_id{i}),i),[prct_l prct_h])-schz.m_dcmp_max_nonsig(i));
+    %%%
+    schz.m_avg_wei_nonsig(i) = median(schz.avg_wei(setdiff(1:np,schz.sig_id{i})));
+    schz.ci_avg_wei_nonsig(i,:) = abs(prctile(schz.avg_wei(setdiff(1:np,schz.sig_id{i})),[prct_l prct_h])-schz.m_avg_wei_nonsig(i));
+    %%%
+
+    % ranksum across densities - "sig" VS "intermediate" (NEW)
+    if ~isempty(setdiff(ctrl.psub1_id{i},ctrl.sig_id{i}))
+        p_eff_ctrl_pint(i) = ranksum(ctrl.eff(setdiff(ctrl.psub1_id{i},ctrl.sig_id{i}),i),ctrl.eff(ctrl.sig_id{i},i));
+        p_trans_ctrl_pint(i) = ranksum(ctrl.trans(setdiff(ctrl.psub1_id{i},ctrl.sig_id{i}),i),ctrl.trans(ctrl.sig_id{i},i));
+        p_dcmp_n_ctrl_pint(i) = ranksum(ctrl.dcmp_n(setdiff(ctrl.psub1_id{i},ctrl.sig_id{i}),i),ctrl.dcmp_n(ctrl.sig_id{i},i));
+        p_dcmp_max_ctrl_pint(i) = ranksum(ctrl.dcmp_max(setdiff(ctrl.psub1_id{i},ctrl.sig_id{i}),i),ctrl.dcmp_max(ctrl.sig_id{i},i));
+        p_avg_wei_ctrl_pint(i) = ranksum(ctrl.avg_wei(setdiff(ctrl.psub1_id{i},ctrl.sig_id{i})),ctrl.avg_wei(ctrl.sig_id{i}));
     else
-        p_eff_ctrl(i) = NaN;
-        p_trans_ctrl(i) = NaN;
-        p_dcmp_n_ctrl(i) = NaN;
-        p_dcmp_max_ctrl(i) = NaN;
+        p_eff_ctrl_pint(i) = NaN;
+        p_trans_ctrl_pint(i) = NaN;
+        p_dcmp_n_ctrl_pint(i) = NaN;
+        p_dcmp_max_ctrl_pint(i) = NaN;
+        p_avg_wei_ctrl_pint(i) = NaN;
     end
     
-    if ~isempty(setdiff(1:np,schz.did{i}))
-        p_eff_schz(i) = ranksum(schz.eff(setdiff(1:np,schz.did{i}),i),schz.eff(schz.did{i},i));
-        p_trans_schz(i) = ranksum(schz.trans(setdiff(1:np,schz.did{i}),i),schz.trans(schz.did{i},i));
-        p_dcmp_n_schz(i) = ranksum(schz.dcmp_n(setdiff(1:np,schz.did{i}),i),schz.dcmp_n(schz.did{i},i));
-        p_dcmp_max_schz(i) = ranksum(schz.dcmp_max(setdiff(1:np,schz.did{i}),i),schz.dcmp_max(schz.did{i},i));
+    if ~isempty(setdiff(schz.psub1_id{i},schz.sig_id{i}))
+        p_eff_schz_pint(i) = ranksum(schz.eff(setdiff(schz.psub1_id{i},schz.sig_id{i}),i),schz.eff(schz.sig_id{i},i));
+        p_trans_schz_pint(i) = ranksum(schz.trans(setdiff(schz.psub1_id{i},schz.sig_id{i}),i),schz.trans(schz.sig_id{i},i));
+        p_dcmp_n_schz_pint(i) = ranksum(schz.dcmp_n(setdiff(schz.psub1_id{i},schz.sig_id{i}),i),schz.dcmp_n(schz.sig_id{i},i));
+        p_dcmp_max_schz_pint(i) = ranksum(schz.dcmp_max(setdiff(schz.psub1_id{i},schz.sig_id{i}),i),schz.dcmp_max(schz.sig_id{i},i));
+        p_avg_wei_schz_pint(i) = ranksum(schz.avg_wei(setdiff(schz.psub1_id{i},schz.sig_id{i})),schz.avg_wei(schz.sig_id{i}));
     else
-        p_eff_schz(i) = NaN;
-        p_trans_schz(i) = NaN;
-        p_dcmp_n_schz(i) = NaN;
-        p_dcmp_max_schz(i) = NaN;
+        p_eff_schz_pint(i) = NaN;
+        p_trans_schz_pint(i) = NaN;
+        p_dcmp_n_schz_pint(i) = NaN;
+        p_dcmp_max_schz_pint(i) = NaN;
+        p_avg_wei_schz_pint(i) = NaN;
     end
     
 end
 
-%% significance of sig VS nonsig
+%% permutation tests - significance of sig VS P-intermediate (0.01 <= P-int < 1)
 
-nperm = 1000; % number of permutations
+nperm = 1000;
 
 % efficiency
-p_eff_sig_perm = zeros(ndens,nperm); r_eff_sig_perm = zeros(ndens,nperm);
-p_eff_ctrl_perm = zeros(ndens,nperm); r_eff_ctrl_perm = zeros(ndens,nperm);
-p_eff_schz_perm = zeros(ndens,nperm); r_eff_schz_perm = zeros(ndens,nperm);
+p_eff_sig_perm = ones(ndens,nperm); r_eff_sig_perm = ones(ndens,nperm);
+p_eff_ctrl_perm = ones(ndens,nperm); r_eff_ctrl_perm = ones(ndens,nperm);
+p_eff_schz_perm = ones(ndens,nperm); r_eff_schz_perm = ones(ndens,nperm);
 
 % transitivity
-p_trans_sig_perm = zeros(ndens,nperm); r_trans_sig_perm = zeros(ndens,nperm);
-p_trans_ctrl_perm = zeros(ndens,nperm); r_trans_ctrl_perm = zeros(ndens,nperm);
-p_trans_schz_perm = zeros(ndens,nperm); r_trans_schz_perm = zeros(ndens,nperm);
+p_trans_sig_perm = ones(ndens,nperm); r_trans_sig_perm = ones(ndens,nperm);
+p_trans_ctrl_perm = ones(ndens,nperm); r_trans_ctrl_perm = ones(ndens,nperm);
+p_trans_schz_perm = ones(ndens,nperm); r_trans_schz_perm = ones(ndens,nperm);
 
 % # components
-p_dcmp_n_sig_perm = zeros(ndens,nperm); r_dcmp_n_sig_perm = zeros(ndens,nperm);
-p_dcmp_n_ctrl_perm = zeros(ndens,nperm); r_dcmp_n_ctrl_perm = zeros(ndens,nperm);
-p_dcmp_n_schz_perm = zeros(ndens,nperm); r_dcmp_n_schz_perm = zeros(ndens,nperm);
+p_dcmp_n_sig_perm = ones(ndens,nperm); r_dcmp_n_sig_perm = ones(ndens,nperm);
+p_dcmp_n_ctrl_perm = ones(ndens,nperm); r_dcmp_n_ctrl_perm = ones(ndens,nperm);
+p_dcmp_n_schz_perm = ones(ndens,nperm); r_dcmp_n_schz_perm = ones(ndens,nperm);
 
 % size of largest components
-p_dcmp_max_sig_perm = zeros(ndens,nperm); r_dcmp_max_sig_perm = zeros(ndens,nperm);
-p_dcmp_max_ctrl_perm = zeros(ndens,nperm); r_dcmp_max_ctrl_perm = zeros(ndens,nperm);
-p_dcmp_max_schz_perm = zeros(ndens,nperm); r_dcmp_max_schz_perm = zeros(ndens,nperm);
+p_dcmp_max_sig_perm = ones(ndens,nperm); r_dcmp_max_sig_perm = ones(ndens,nperm);
+p_dcmp_max_ctrl_perm = ones(ndens,nperm); r_dcmp_max_ctrl_perm = ones(ndens,nperm);
+p_dcmp_max_schz_perm = ones(ndens,nperm); r_dcmp_max_schz_perm = ones(ndens,nperm);
 
-for d = 2:1:ndens % hard-coded start at edge density 2, as at edge density 1 all controls are significant (IN COBRE DATA)
-    disp(['edge density ' num2str(d) '%'])
+%%%
+% average weight
+p_eff_sig_perm = ones(ndens,nperm); r_eff_sig_perm = ones(ndens,nperm);
+p_eff_ctrl_perm = ones(ndens,nperm); r_eff_ctrl_perm = ones(ndens,nperm);
+p_eff_schz_perm = ones(ndens,nperm); r_eff_schz_perm = ones(ndens,nperm);
+%%%
+
+p_eff_ctrl_pint(i) = ranksum(ctrl.eff(setdiff(ctrl.psub1_id{i},ctrl.sig_id{i}),i),ctrl.eff(ctrl.sig_id{i},i));
+
+for d = 2:1:ndens % ignore d=1 as all controls are in the significant group (and thus the P-int group is empty)
+    d
     
-    % empirical effect sizes
+    % "empirical" effect sizes
     
     % efficiency
-    [p_eff_sig_emp(d),r_eff_sig_emp(d)] = ranksum_effect_size(ctrl.eff(ctrl.did{d},d),schz.eff(schz.did{d},d)); % ctrl VS schz (sig only)
-    [p_eff_ctrl_emp(d),r_eff_ctrl_emp(d)] = ranksum_effect_size(ctrl.eff(ctrl.did{d},d),ctrl.eff(setdiff(1:nc,ctrl.did{d}),d)); % within group (sig VS nonsig)
-    [p_eff_schz_emp(d),r_eff_schz_emp(d)] = ranksum_effect_size(schz.eff(schz.did{d},d),schz.eff(setdiff(1:np,schz.did{d}),d));
+    [p_eff_sig_emp(d),r_eff_sig_emp(d)] = ranksum_effect_size(ctrl.eff(ctrl.sig_id{d},d),schz.eff(schz.sig_id{d},d)); % ctrl VS schz (sig only)
+    [p_eff_ctrl_emp(d),r_eff_ctrl_emp(d)] = ranksum_effect_size(ctrl.eff(ctrl.sig_id{d},d),ctrl.eff(setdiff(ctrl.psub1_id{d},ctrl.sig_id{d}),d)); % within group (sig VS nonsig)
+    [p_eff_schz_emp(d),r_eff_schz_emp(d)] = ranksum_effect_size(schz.eff(schz.sig_id{d},d),schz.eff(setdiff(schz.psub1_id{d},schz.sig_id{d}),d));
     
     % transitivity
-    [p_trans_sig_emp(d),r_trans_sig_emp(d)] = ranksum_effect_size(ctrl.trans(ctrl.did{d},d),schz.trans(schz.did{d},d)); % ctrl VS schz (sig only)
-    [p_trans_ctrl_emp(d),r_trans_ctrl_emp(d)] = ranksum_effect_size(ctrl.trans(ctrl.did{d},d),ctrl.trans(setdiff(1:nc,ctrl.did{d}),d)); % within group (sig VS nonsig)
-    [p_trans_schz_emp(d),r_trans_schz_emp(d)] = ranksum_effect_size(schz.trans(schz.did{d},d),schz.trans(setdiff(1:np,schz.did{d}),d));
+    [p_trans_sig_emp(d),r_trans_sig_emp(d)] = ranksum_effect_size(ctrl.trans(ctrl.sig_id{d},d),schz.trans(schz.sig_id{d},d)); % ctrl VS schz (sig only)
+    [p_trans_ctrl_emp(d),r_trans_ctrl_emp(d)] = ranksum_effect_size(ctrl.trans(ctrl.sig_id{d},d),ctrl.trans(setdiff(ctrl.psub1_id{d},ctrl.sig_id{d}),d)); % within group (sig VS nonsig)
+    [p_trans_schz_emp(d),r_trans_schz_emp(d)] = ranksum_effect_size(schz.trans(schz.sig_id{d},d),schz.trans(setdiff(schz.psub1_id{d},schz.sig_id{d}),d));
     
     % # components
-    [p_dcmp_n_sig_emp(d),r_dcmp_n_sig_emp(d)] = ranksum_effect_size(ctrl.dcmp_n(ctrl.did{d},d),schz.dcmp_n(schz.did{d},d)); % ctrl VS schz (sig only)
-    [p_dcmp_n_ctrl_emp(d),r_dcmp_n_ctrl_emp(d)] = ranksum_effect_size(ctrl.dcmp_n(ctrl.did{d},d),ctrl.dcmp_n(setdiff(1:nc,ctrl.did{d}),d)); % within group (sig VS nonsig)
-    [p_dcmp_n_schz_emp(d),r_dcmp_n_schz_emp(d)] = ranksum_effect_size(schz.dcmp_n(schz.did{d},d),schz.dcmp_n(setdiff(1:np,schz.did{d}),d));
+    [p_dcmp_n_sig_emp(d),r_dcmp_n_sig_emp(d)] = ranksum_effect_size(ctrl.dcmp_n(ctrl.sig_id{d},d),schz.dcmp_n(schz.sig_id{d},d)); % ctrl VS schz (sig only)
+    [p_dcmp_n_ctrl_emp(d),r_dcmp_n_ctrl_emp(d)] = ranksum_effect_size(ctrl.dcmp_n(ctrl.sig_id{d},d),ctrl.dcmp_n(setdiff(ctrl.psub1_id{d},ctrl.sig_id{d}),d)); % within group (sig VS nonsig)
+    [p_dcmp_n_schz_emp(d),r_dcmp_n_schz_emp(d)] = ranksum_effect_size(schz.dcmp_n(schz.sig_id{d},d),schz.dcmp_n(setdiff(schz.psub1_id{d},schz.sig_id{d}),d));
     
     % size of largest component
-    [p_dcmp_max_sig_emp(d),r_dcmp_max_sig_emp(d)] = ranksum_effect_size(ctrl.dcmp_max(ctrl.did{d},d),schz.dcmp_max(schz.did{d},d)); % ctrl VS schz (sig only)
-    [p_dcmp_max_ctrl_emp(d),r_dcmp_max_ctrl_emp(d)] = ranksum_effect_size(ctrl.dcmp_max(ctrl.did{d},d),ctrl.dcmp_max(setdiff(1:nc,ctrl.did{d}),d)); % within group (sig VS nonsig)
-    [p_dcmp_max_schz_emp(d),r_dcmp_max_schz_emp(d)] = ranksum_effect_size(schz.dcmp_max(schz.did{d},d),schz.dcmp_max(setdiff(1:np,schz.did{d}),d));
+    [p_dcmp_max_sig_emp(d),r_dcmp_max_sig_emp(d)] = ranksum_effect_size(ctrl.dcmp_max(ctrl.sig_id{d},d),schz.dcmp_max(schz.sig_id{d},d)); % ctrl VS schz (sig only)
+    [p_dcmp_max_ctrl_emp(d),r_dcmp_max_ctrl_emp(d)] = ranksum_effect_size(ctrl.dcmp_max(ctrl.sig_id{d},d),ctrl.dcmp_max(setdiff(ctrl.psub1_id{d},ctrl.sig_id{d}),d)); % within group (sig VS nonsig)
+    [p_dcmp_max_schz_emp(d),r_dcmp_max_schz_emp(d)] = ranksum_effect_size(schz.dcmp_max(schz.sig_id{d},d),schz.dcmp_max(setdiff(schz.psub1_id{d},schz.sig_id{d}),d));
+    
+    % average weight
+    [p_avg_wei_sig_emp(d),r_avg_wei_sig_emp(d)] = ranksum_effect_size(ctrl.avg_wei_full(ctrl.sig_id{d}),schz.avg_wei_full(schz.sig_id{d})); % ctrl VS schz (sig only)
+    [p_avg_wei_ctrl_emp(d),r_avg_wei_ctrl_emp(d)] = ranksum_effect_size(ctrl.avg_wei_full(ctrl.sig_id{d}),ctrl.avg_wei_full(setdiff(ctrl.psub1_id{d},ctrl.sig_id{d}))); % within group (sig VS nonsig)
+    [p_avg_wei_schz_emp(d),r_avg_wei_schz_emp(d)] = ranksum_effect_size(schz.avg_wei_full(schz.sig_id{d}),schz.avg_wei_full(setdiff(schz.psub1_id{d},schz.sig_id{d})));
     
     % permuted effect sizes
     for j = 1:nperm
         
         % permuted ids (length = sig)
-        perm_idc = randsample(nc,length(ctrl.did{d}));
-        perm_idp = randsample(np,length(schz.did{d}));
+        perm_idc = randsample(nc,length(ctrl.sig_id{d}));
+        perm_idp = randsample(np,length(schz.sig_id{d}));
         
-        % permuted ids complement (length = non-sig)
-        perm_idc_comp = setdiff(1:nc,perm_idc);
-        perm_idp_comp = setdiff(1:np,perm_idp);
+        % permuted ids P-INT "complement" (from complement of #p-sig, sample #p-int)
+        perm_idc_comp = randsample(setdiff(1:nc,perm_idc),length(ctrl.psub1_id{d})-length(ctrl.sig_id{d}));
+        perm_idp_comp = randsample(setdiff(1:np,perm_idp),length(ctrl.psub1_id{d})-length(ctrl.sig_id{d}));
         
         % efficiency
         [p_eff_sig_perm(d,j),r_eff_sig_perm(d,j)] = ranksum_effect_size(ctrl.eff(perm_idc,d),schz.eff(perm_idp,d)); % ctrl VS schz (sig only size)
@@ -712,6 +902,11 @@ for d = 2:1:ndens % hard-coded start at edge density 2, as at edge density 1 all
         [p_dcmp_max_sig_perm(d,j),r_dcmp_max_sig_perm(d,j)] = ranksum_effect_size(ctrl.dcmp_max(perm_idc,d),schz.dcmp_max(perm_idp,d)); % ctrl VS schz (sig only size)
         [p_dcmp_max_ctrl_perm(d,j),r_dcmp_max_ctrl_perm(d,j)] = ranksum_effect_size(ctrl.dcmp_max(perm_idc,d),ctrl.dcmp_max(perm_idc_comp,d)); % within group (sig VS nonsig size)
         [p_dcmp_max_schz_perm(d,j),r_dcmp_max_schz_perm(d,j)] = ranksum_effect_size(schz.dcmp_max(perm_idp,d),schz.dcmp_max(perm_idp_comp,d));
+
+        % average weight
+        [p_avg_wei_sig_perm(d,j),r_avg_wei_sig_perm(d,j)] = ranksum_effect_size(ctrl.avg_wei_full(perm_idc),schz.avg_wei_full(perm_idp)); % ctrl VS schz (sig only size)
+        [p_avg_wei_ctrl_perm(d,j),r_avg_wei_ctrl_perm(d,j)] = ranksum_effect_size(ctrl.avg_wei_full(perm_idc),ctrl.avg_wei_full(perm_idc_comp)); % within group (sig VS nonsig size)
+        [p_avg_wei_schz_perm(d,j),r_avg_wei_schz_perm(d,j)] = ranksum_effect_size(schz.avg_wei_full(perm_idp),schz.avg_wei_full(perm_idp_comp));
         
     end
     
@@ -737,36 +932,36 @@ for d = 2:1:ndens % hard-coded start at edge density 2, as at edge density 1 all
     pperm_dcmp_max_ctrl(d) = sum(abs(r_dcmp_max_ctrl_emp(d))<abs(r_dcmp_max_ctrl_perm(d,:)))/nperm;
     pperm_dcmp_max_schz(d) = sum(abs(r_dcmp_max_schz_emp(d))<abs(r_dcmp_max_schz_perm(d,:)))/nperm;
     
+    % average weight
+    pperm_avg_wei_sig(d) = sum(abs(r_avg_wei_sig_emp(d))<abs(r_avg_wei_sig_perm(d,:)))/nperm;
+    pperm_avg_wei_ctrl(d) = sum(abs(r_avg_wei_ctrl_emp(d))<abs(r_avg_wei_ctrl_perm(d,:)))/nperm;
+    pperm_avg_wei_schz(d) = sum(abs(r_avg_wei_schz_emp(d))<abs(r_avg_wei_schz_perm(d,:)))/nperm;
+
 end
-
-% set ctrl "d=1" P=1 (as length(nonsig)==0)
-pperm_eff_ctrl(1) = 1;
-pperm_trans_ctrl(1) = 1;
-pperm_dcmp_n_ctrl(1) = 1;
-pperm_dcmp_max_ctrl(1) = 1;
-pperm_nneg_ctrl(1) = 1;
-
-%% invcount
-% number of participants whose edges are all "significant" at a given edge density
-
-ndens_c = floor(100*max(max(ctrl.dens)));
-ndens_p = floor(100*max(max(schz.dens)));
-
-for i = 1:1:ndens_c; ctrl.invcount(i) = sum(ctrl.dens>(i/100)); end;
-for i = 1:1:ndens_p; schz.invcount(i) = sum(schz.dens>(i/100)); end;
 
 %% obtain maximum p-value if keeping all subjects
 
 maxp_dens = ndens;
 
+% delete relevant variables
+clear_fields = {'max_p'};
+if all(isfield(ctrl,clear_fields)) % Will be True or False.
+    ctrl = rmfield(ctrl,clear_fields);
+    schz = rmfield(schz,clear_fields);
+end
+
 for d = 1:1:maxp_dens
-    disp(['edge density ' num2str(d) '%'])
-    
+    d
     dens_all = d/100;
     nedge_all = ceil(dens_all*(nroi*(nroi-1)/2));
     
     for i = 1:1:nc
-        temp_p = ctrl.fdr(:,:,i);
+        %%% exclude negative edges
+        t_p = ctrl.fdr(:,:,i);
+        t_r = ctrl.r(:,:,i);
+        temp_p = nan(nroi);
+        temp_p(t_r>0) = t_p(t_r>0);
+        %%%
         [b,ix] = sort(temp_p(triu_ind),'ascend'); % sort edges by value
         [row,col] = ind2sub([nroi,nroi],triu_ind(ix(1:nedge_all)));
         % fill new matrix
@@ -779,7 +974,12 @@ for d = 1:1:maxp_dens
     end
     
     for i = 1:1:np
-        temp_p = schz.fdr(:,:,i);
+        %%% exclude negative edges
+        t_p = schz.fdr(:,:,i);
+        t_r = schz.r(:,:,i);
+        temp_p = nan(nroi);
+        temp_p(t_r>0) = t_p(t_r>0);
+        %%%
         [b,ix] = sort(temp_p(triu_ind),'ascend'); % sort edges by value
         [row,col] = ind2sub([nroi,nroi],triu_ind(ix(1:nedge_all)));
         % fill new matrix
@@ -793,56 +993,7 @@ for d = 1:1:maxp_dens
     
 end
 
-%% histogram bars for nparticipant ratios (n(sig) VS n(non-sig))
-
-% ctrl
-figure
-b = bar(1:ndens,[cellfun('length',ctrl.did);nc-cellfun('length',ctrl.did)]','stack');
-set(b(1),'FaceColor',ctrl.col,'FaceAlpha',0.7)
-set(b(2),'FaceColor',ctrl.col_nonsig,'FaceAlpha',0.7)
-xlim([0 ndens+1]); ylim([0 nc]); set(gca,'YTick',[0,nc]);
-set(gca,'FontSize',fsize2); 
-xlabel('edge density \rho (%)','FontSize',fsize,'FontName','Arial');
-ylabel('# ctrl','FontSize',fsize,'FontName','Arial');
-pos = get(gcf,'Position');
-set(gcf,'Position', [pos(1) pos(2) 1.25*pos(3) 0.35*pos(4)]); set(gcf,'color','w');
-print([plot_path 'ctrl_sig_vs_nonsig_bar_sc' sc '_alpha' num2str(100*alpha) '.png'],'-dpng')
-
-% schz
-figure
-b = bar(1:ndens,[cellfun('length',schz.did);np-cellfun('length',schz.did)]','stack');
-set(b(1),'FaceColor',schz.col,'FaceAlpha',0.7)
-set(b(2),'FaceColor',schz.col_nonsig,'FaceAlpha',0.7)
-xlim([0 ndens+1]); ylim([0 np]); set(gca,'YTick',[0,np]);
-set(gca,'FontSize',fsize2); 
-xlabel('edge density \rho (%)','FontSize',fsize,'FontName','Arial');
-ylabel('# schz','FontSize',fsize,'FontName','Arial');
-pos = get(gcf,'Position');
-set(gcf,'Position', [pos(1) pos(2) 1.25*pos(3) 0.35*pos(4)]); set(gcf,'color','w');
-print([plot_path 'schz_sig_vs_nonsig_bar_sc' sc '_alpha' num2str(100*alpha) '.png'],'-dpng')
-
-% drop off curves
-figure;
-hold on
-plot(1:ndens,ctrl.invcount(1:ndens),'Color',ctrl.col,'LineWidth',1);
-plot(1:ndens,schz.invcount(1:ndens),'Color',schz.col,'LineWidth',1);
-scatter(1:ndens,ctrl.invcount(1:ndens),26,'MarkerFaceColor',ctrl.col,'MarkerEdgeColor',ctrl.col); 
-scatter(1:ndens,schz.invcount(1:ndens),26,'MarkerFaceColor',schz.col,'MarkerEdgeColor',schz.col);
-hold off
-
-set(gca,'FontSize',fsize2); box off
-xlabel('edge density \rho (%)','FontSize',fsize,'FontName','Arial');
-ylabel('# sig. participants','FontSize',fsize,'FontName','Arial');
-
-pos = get(gcf,'Position');
-set(gcf,'Position', [pos(1) pos(2) 1.25*pos(3) 0.70*pos(4)]); set(gcf,'color','w');
-
-xlim([0 ndens+1]); 
-set(gca,'YTick',[0,40,80])
-
-print([plot_path 'drop_off_sc' sc '_alpha' num2str(100*alpha) '.png'],'-dpng')
-
-% max(P_FDR)
+% plot, as a function of edge density
 figure;
 hold on
 for i = 1:1:nc; hc = plot(1:maxp_dens,ctrl.max_p(:,i),'Color',ctrl.col_light,'LineWidth',lwd_ind); end
@@ -865,124 +1016,154 @@ set(gca,'YTick',[0,0.5,1])
 
 print([plot_path 'max_P_sc' sc '_alpha' num2str(100*alpha) '.png'],'-dpng')
 
-%% plots - emp (eff, trans)
+%% histogram bars for nparticipant ratios (n(sig) VS n(non-sig))
+
+% ctrl
+figure
+b = bar(1:ndens,[cellfun('length',ctrl.sig_id);cellfun('length',ctrl.psub1_id)-cellfun('length',ctrl.sig_id); nc-cellfun('length',ctrl.psub1_id)]','stack');
+set(b(1),'FaceColor',ctrl.col,'FaceAlpha',0.7)
+set(b(2),'FaceColor',ctrl.col_nonsig,'FaceAlpha',0.7)
+set(b(3),'FaceColor',rgb('lightgrey'),'FaceAlpha',0.7)
+xlim([0 ndens+1]); ylim([0 nc]); set(gca,'YTick',[0,nc]);
+set(gca,'FontSize',fsize2); 
+xlabel('edge density \rho (%)','FontSize',fsize,'FontName','Arial');
+ylabel('# ctrl','FontSize',fsize,'FontName','Arial');
+pos = get(gcf,'Position');
+set(gcf,'Position', [pos(1) pos(2) 1.25*pos(3) 0.35*pos(4)]); set(gcf,'color','w');
+print([plot_path 'ctrl_sig_vs_nonsig_bar_sc' sc '_alpha' num2str(100*alpha) '.png'],'-dpng')
+
+% schz
+figure
+b = bar(1:ndens,[cellfun('length',schz.sig_id);cellfun('length',schz.psub1_id)-cellfun('length',schz.sig_id); np-cellfun('length',schz.psub1_id)]','stack');
+set(b(1),'FaceColor',schz.col,'FaceAlpha',0.7)
+set(b(2),'FaceColor',schz.col_nonsig,'FaceAlpha',0.7)
+set(b(3),'FaceColor',rgb('lightgrey'),'FaceAlpha',0.7)
+xlim([0 ndens+1]); ylim([0 np]); set(gca,'YTick',[0,np]);
+set(gca,'FontSize',fsize2); 
+xlabel('edge density \rho (%)','FontSize',fsize,'FontName','Arial');
+ylabel('# schz','FontSize',fsize,'FontName','Arial');
+pos = get(gcf,'Position');
+set(gcf,'Position', [pos(1) pos(2) 1.25*pos(3) 0.35*pos(4)]); set(gcf,'color','w');
+print([plot_path 'schz_sig_vs_nonsig_bar_sc' sc '_alpha' num2str(100*alpha) '.png'],'-dpng')
+
+%% plots - empirical (eff, trans)
 
 fsize = 30;
 fsize2 = 20;
 
 %%%%% ctrl VS schz
 
-%%% all subjects
+%%% all (P<1) subjects - with drop-off
 
 % efficiency
-boundedline_plot(1:ndens,ctrl.m_eff,ctrl.ci_eff,schz.m_eff,schz.ci_eff,...
-    ctrl.col,schz.col,alph,NaN,p_eff,'edge density \rho (%)','efficiency','ctrl','schz',[0 ndens+1],[0 0.8],fsize,fsize2,...
-    plot_path,['eff_ctrl_vs_schz_all_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
+boundedline_plot_2p_drop(1:ndens,ctrl.m_eff_psub1,ctrl.ci_eff_psub1,schz.m_eff_psub1,schz.ci_eff_psub1,ctrl.psub1_count(1:ndens),schz.psub1_count(1:ndens),...
+    ctrl.col,schz.col,alph,NaN,p_eff_psub1,[],'edge density \rho (%)','efficiency','# part. (P<1)','ctrl','schz',[0 ndens+1],[0 0.8],[0 80],fsize,fsize2,...
+    plot_path,['eff_ctrl_vs_schz_psub1_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
 
 % transitivity
-boundedline_plot(1:ndens,ctrl.m_trans,ctrl.ci_trans,schz.m_trans,schz.ci_trans,...
-    ctrl.col,schz.col,alph,NaN,p_trans,'edge density \rho (%)','transitivity','ctrl','schz',[0 ndens+1],[0.3 0.9],fsize,fsize2,...
-    plot_path,['trans_ctrl_vs_schz_all_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
+boundedline_plot_2p_drop(1:ndens,ctrl.m_trans_psub1,ctrl.ci_trans_psub1,schz.m_trans_psub1,schz.ci_trans_psub1,ctrl.psub1_count(1:ndens),schz.psub1_count(1:ndens),...
+    ctrl.col,schz.col,alph,NaN,p_trans_psub1,[],'edge density \rho (%)','transitivity','# part. (P<1)','ctrl','schz',[0 ndens+1],[0.3 0.9],[0 80],fsize,fsize2,...
+    plot_path,['trans_ctrl_vs_schz_psub1_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
 
 %%% significant subjects only
 
 % efficiency
-boundedline_plot_2p_drop(1:ndens,ctrl.m_eff_sig,ctrl.ci_eff_sig,schz.m_eff_sig,schz.ci_eff_sig,ctrl.invcount(1:ndens),schz.invcount(1:ndens),...
+boundedline_plot_2p_drop(1:ndens,ctrl.m_eff_sig,ctrl.ci_eff_sig,schz.m_eff_sig,schz.ci_eff_sig,ctrl.sig_count(1:ndens),schz.sig_count(1:ndens),...
     ctrl.col,schz.col,alph,NaN,p_eff_sig,pperm_eff_sig,'edge density \rho (%)','efficiency','# sig. participants','ctrl (sig)','schz (sig)',[0 ndens+1],[0 0.8],[0 80],fsize,fsize2,...
     plot_path,['eff_ctrl_vs_schz_sig_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
 
 % transitivity
-boundedline_plot_2p_drop(1:ndens,ctrl.m_trans_sig,ctrl.ci_trans_sig,schz.m_trans_sig,schz.ci_trans_sig,ctrl.invcount(1:ndens),schz.invcount(1:ndens),...
+boundedline_plot_2p_drop(1:ndens,ctrl.m_trans_sig,ctrl.ci_trans_sig,schz.m_trans_sig,schz.ci_trans_sig,ctrl.sig_count(1:ndens),schz.sig_count(1:ndens),...
     ctrl.col,schz.col,alph,NaN,p_trans_sig,pperm_trans_sig,'edge density \rho (%)','transitivity','# sig. participants','ctrl (sig)','schz (sig)',[0 ndens+1],[0.3 0.9],[0 80],fsize,fsize2,...
     plot_path,['trans_ctrl_vs_schz_sig_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
 
-%%%%% significant VS non-significant subjects 
+%%%%% significant VS non-significant (P-int: 0.01 <= P-int < 1) subjects 
 
 %%% ctrl
 
 % efficiency
-boundedline_plot_2p(1:ndens,ctrl.m_eff_sig,ctrl.ci_eff_sig,ctrl.m_eff_nonsig,ctrl.ci_eff_nonsig,...
-    ctrl.col,ctrl.col_nonsig,alph,ctrl.r3to1,p_eff_ctrl,pperm_eff_ctrl,'edge density \rho (%)','efficiency','significant','non-significant',[0 ndens+1],[0 0.8],fsize,fsize2,...
-    plot_path,['eff_sig_vs_nonsig_ctrl_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
+boundedline_plot_2p(1:ndens,ctrl.m_eff_sig,ctrl.ci_eff_sig,ctrl.m_eff_pint,ctrl.ci_eff_pint,...
+    ctrl.col,ctrl.col_nonsig,alph,ctrl.r3to1,p_eff_ctrl_pint,pperm_eff_ctrl,'edge density \rho (%)','efficiency','significant','non-significant',[0 ndens+1],[0 0.8],fsize,fsize2,...
+    plot_path,['eff_sig_vs_pint_ctrl_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
 
 % transitivity
-boundedline_plot_2p(1:ndens,ctrl.m_trans_sig,ctrl.ci_trans_sig,ctrl.m_trans_nonsig,ctrl.ci_trans_nonsig,...
-    ctrl.col,ctrl.col_nonsig,alph,ctrl.r3to1,p_trans_ctrl,pperm_trans_ctrl,'edge density \rho (%)','transitivity','significant','non-significant',[0 ndens+1],[0.3 0.9],fsize,fsize2,...
-    plot_path,['trans_sig_vs_nonsig_ctrl_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
+boundedline_plot_2p(1:ndens,ctrl.m_trans_sig,ctrl.ci_trans_sig,ctrl.m_trans_pint,ctrl.ci_trans_pint,...
+    ctrl.col,ctrl.col_nonsig,alph,ctrl.r3to1,p_trans_ctrl_pint,pperm_trans_ctrl,'edge density \rho (%)','transitivity','significant','non-significant',[0 ndens+1],[0.3 0.9],fsize,fsize2,...
+    plot_path,['trans_sig_vs_pint_ctrl_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
 
 %%% schz
 
 % efficiency
-boundedline_plot_2p(1:ndens,schz.m_eff_sig,schz.ci_eff_sig,schz.m_eff_nonsig,schz.ci_eff_nonsig,...
-    schz.col,schz.col_nonsig,alph,schz.r3to1,p_eff_schz,pperm_eff_schz,'edge density \rho (%)','efficiency','significant','non-significant',[0 ndens+1],[0 0.8],fsize,fsize2,...
-    plot_path,['eff_sig_vs_nonsig_schz_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
+boundedline_plot_2p(1:ndens,schz.m_eff_sig,schz.ci_eff_sig,schz.m_eff_pint,schz.ci_eff_pint,...
+    schz.col,schz.col_nonsig,alph,schz.r3to1,p_eff_schz_pint,pperm_eff_schz,'edge density \rho (%)','efficiency','significant','non-significant',[0 ndens+1],[0 0.8],fsize,fsize2,...
+    plot_path,['eff_sig_vs_pint_schz_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
 
 % transitivity
-boundedline_plot_2p(1:ndens,schz.m_trans_sig,schz.ci_trans_sig,schz.m_trans_nonsig,schz.ci_trans_nonsig,...
-    schz.col,schz.col_nonsig,alph,schz.r3to1,p_trans_schz,pperm_trans_schz,'edge density \rho (%)','transitivity','significant','non-significant',[0 ndens+1],[0.3 0.9],fsize,fsize2,...
-    plot_path,['trans_sig_vs_nonsig_schz_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
+boundedline_plot_2p(1:ndens,schz.m_trans_sig,schz.ci_trans_sig,schz.m_trans_pint,schz.ci_trans_pint,...
+    schz.col,schz.col_nonsig,alph,schz.r3to1,p_trans_schz_pint,pperm_trans_schz,'edge density \rho (%)','transitivity','significant','non-significant',[0 ndens+1],[0.3 0.9],fsize,fsize2,...
+    plot_path,['trans_sig_vs_pint_schz_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
 
-%% plots - emp (cmp)
+%% plots - emp (cmp, mean corr)
 
 %%%%% ctrl VS schz
 
-%%% all subjects
+%%% all (P<1) subjects - with drop-off
 
 % # components
-boundedline_plot(1:ndens,ctrl.m_dcmp_n,ctrl.ci_dcmp_n,schz.m_dcmp_n,schz.ci_dcmp_n,...
-    ctrl.col,schz.col,alph,NaN,p_dcmp_n,'edge density \rho (%)','# components','ctrl','schz',[0 ndens+1],[0 150],fsize,fsize2,...
-    plot_path,['dcmp_n_ctrl_vs_schz_all_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
+boundedline_plot_2p_drop(1:ndens,ctrl.m_dcmp_n_psub1,ctrl.ci_dcmp_n_psub1,schz.m_dcmp_n_psub1,schz.ci_dcmp_n_psub1,ctrl.psub1_count(1:ndens),schz.psub1_count(1:ndens),...
+    ctrl.col,schz.col,alph,NaN,p_dcmp_n_psub1,[],'edge density \rho (%)','# components','# part. (P<1)','ctrl','schz',[0 ndens+1],[0 150],[0 80],fsize,fsize2,...
+    plot_path,['dcmp_n_ctrl_vs_schz_psub1_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
 
-% size of largest component
-boundedline_plot(1:ndens,ctrl.m_dcmp_max,ctrl.ci_dcmp_max,schz.m_dcmp_max,schz.ci_dcmp_max,...
-    ctrl.col,schz.col,alph,NaN,p_dcmp_max,'edge density \rho (%)','max(comp. size)','ctrl','schz',[0 ndens+1],[200 450],fsize,fsize2,...
-    plot_path,['dcmp_max_ctrl_vs_schz_all_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
+% mean correlation
+boundedline_plot_2p_drop(1:ndens,ctrl.m_avg_wei_psub1,ctrl.ci_avg_wei_psub1,schz.m_avg_wei_psub1,schz.ci_avg_wei_psub1,ctrl.psub1_count(1:ndens),schz.psub1_count(1:ndens),...
+    ctrl.col,schz.col,alph,NaN,p_avg_wei_psub1,[],'edge density \rho (%)','\mu correlation','# part. (P<1)','ctrl','schz',[0 ndens+1],[0 0.8],[0 80],fsize,fsize2,...
+    plot_path,['avg_wei_ctrl_vs_schz_psub1_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
 
 %%% significant subjects only
 
 % # components
-boundedline_plot_2p_drop(1:ndens,ctrl.m_dcmp_n_sig,ctrl.ci_dcmp_n_sig,schz.m_dcmp_n_sig,schz.ci_dcmp_n_sig,ctrl.invcount(1:ndens),schz.invcount(1:ndens),...
+boundedline_plot_2p_drop(1:ndens,ctrl.m_dcmp_n_sig,ctrl.ci_dcmp_n_sig,schz.m_dcmp_n_sig,schz.ci_dcmp_n_sig,ctrl.sig_count(1:ndens),schz.sig_count(1:ndens),...
     ctrl.col,schz.col,alph,NaN,p_dcmp_n_sig,pperm_dcmp_n_sig,'edge density \rho (%)','# components','# sig. participants','ctrl (sig)','schz (sig)',[0 ndens+1],[0 150],[0 80],fsize,fsize2,...
     plot_path,['dcmp_n_ctrl_vs_schz_sig_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
 
-% size of largest component
-boundedline_plot_2p_drop(1:ndens,ctrl.m_dcmp_max_sig,ctrl.ci_dcmp_max_sig,schz.m_dcmp_max_sig,schz.ci_dcmp_max_sig,ctrl.invcount(1:ndens),schz.invcount(1:ndens),...
-    ctrl.col,schz.col,alph,NaN,p_dcmp_max_sig,pperm_dcmp_max_sig,'edge density \rho (%)','max(comp. size)','# sig. participants','ctrl (sig)','schz (sig)',[0 ndens+1],[200 450],[0 80],fsize,fsize2,...
-    plot_path,['dcmp_max_ctrl_vs_schz_sig_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
+% mean correlation
+boundedline_plot_2p_drop(1:ndens,ctrl.m_avg_wei_sig,ctrl.ci_avg_wei_sig,schz.m_avg_wei_sig,schz.ci_avg_wei_sig,ctrl.sig_count(1:ndens),schz.sig_count(1:ndens),...
+    ctrl.col,schz.col,alph,NaN,p_avg_wei_sig,pperm_avg_wei_sig,'edge density \rho (%)','\mu correlation','# sig. participants',[],[],[0 ndens+1],[0.2 0.6],[0 80],fsize,fsize2,...
+    plot_path,['avg_wei_ctrl_vs_schz_sig_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
 
-%%%%% significant VS non-significant subjects 
+%%%%% significant VS non-significant (P-int: 0.01 <= P-int < 1) subjects 
 
 %%% ctrl
 
 % # components
-boundedline_plot_2p(1:ndens,ctrl.m_dcmp_n_sig,ctrl.ci_dcmp_n_sig,ctrl.m_dcmp_n_nonsig,ctrl.ci_dcmp_n_nonsig,...
-    ctrl.col,ctrl.col_nonsig,alph,ctrl.r3to1,p_dcmp_n_ctrl,pperm_dcmp_n_ctrl,'edge density \rho (%)','# components','significant','non-significant',[0 ndens+1],[0 150],fsize,fsize2,...
-    plot_path,['dcmp_n_sig_vs_nonsig_ctrl_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
+boundedline_plot_2p(1:ndens,ctrl.m_dcmp_n_sig,ctrl.ci_dcmp_n_sig,ctrl.m_dcmp_n_pint,ctrl.ci_dcmp_n_pint,...
+    ctrl.col,ctrl.col_nonsig,alph,ctrl.r3to1,p_dcmp_n_ctrl_pint,pperm_dcmp_n_ctrl,'edge density \rho (%)','# components','significant','non-significant',[0 ndens+1],[0 150],fsize,fsize2,...
+    plot_path,['dcmp_n_sig_vs_pint_ctrl_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
 
-% size of largest component
-boundedline_plot_2p(1:ndens,ctrl.m_dcmp_max_sig,ctrl.ci_dcmp_max_sig,ctrl.m_dcmp_max_nonsig,ctrl.ci_dcmp_max_nonsig,...
-    ctrl.col,ctrl.col_nonsig,alph,ctrl.r3to1,p_dcmp_max_ctrl,pperm_dcmp_max_ctrl,'edge density \rho (%)','max(comp. size)','significant','non-significant',[0 ndens+1],[200 450],fsize,fsize2,...
-    plot_path,['dcmp_max_sig_vs_nonsig_ctrl_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
+% mean correlation
+boundedline_plot_2p(1:ndens,ctrl.m_avg_wei_sig,ctrl.ci_avg_wei_sig,ctrl.m_avg_wei_pint,ctrl.ci_avg_wei_pint,...
+    ctrl.col,ctrl.col_nonsig,alph,ctrl.r3to1,p_avg_wei_ctrl_pint,pperm_avg_wei_ctrl,'edge density \rho (%)','\mu correlation',[],[],[0 ndens+1],[0 0.6],fsize,fsize2,...
+    plot_path,['avg_wei_sig_vs_nonsig_ctrl_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
 
 %%% schz
 
 % # components
-boundedline_plot_2p(1:ndens,schz.m_dcmp_n_sig,schz.ci_dcmp_n_sig,schz.m_dcmp_n_nonsig,schz.ci_dcmp_n_nonsig,...
-    schz.col,schz.col_nonsig,alph,schz.r3to1,p_dcmp_n_schz,pperm_dcmp_n_schz,'edge density \rho (%)','# components','significant','non-significant',[0 ndens+1],[0 150],fsize,fsize2,...
-    plot_path,['dcmp_n_sig_vs_nonsig_schz_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
+boundedline_plot_2p(1:ndens,schz.m_dcmp_n_sig,schz.ci_dcmp_n_sig,schz.m_dcmp_n_pint,schz.ci_dcmp_n_pint,...
+    schz.col,schz.col_nonsig,alph,schz.r3to1,p_dcmp_n_schz_pint,pperm_dcmp_n_schz,'edge density \rho (%)','# components','significant','non-significant',[0 ndens+1],[0 150],fsize,fsize2,...
+    plot_path,['dcmp_n_sig_vs_pint_schz_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
 
-% size of largest component
-boundedline_plot_2p(1:ndens,schz.m_dcmp_max_sig,schz.ci_dcmp_max_sig,schz.m_dcmp_max_nonsig,schz.ci_dcmp_max_nonsig,...
-    schz.col,schz.col_nonsig,alph,schz.r3to1,p_dcmp_max_schz,pperm_dcmp_max_schz,'edge density \rho (%)','max(comp. size)','significant','non-significant',[0 ndens+1],[200 450],fsize,fsize2,...
-    plot_path,['dcmp_max_sig_vs_nonsig_schz_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
+% mean correlation
+boundedline_plot_2p(1:ndens,schz.m_avg_wei_sig,schz.ci_avg_wei_sig,schz.m_avg_wei_pint,schz.ci_avg_wei_pint,...
+    schz.col,schz.col_nonsig,alph,schz.r3to1,p_avg_wei_schz_pint,pperm_avg_wei_schz,'edge density \rho (%)','\mu correlation',[],[],[0 ndens+1],[0 0.6],fsize,fsize2,...
+    plot_path,['avg_wei_sig_vs_nonsig_schz_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
 
 %% threshold to fixed density by R (across range of densities)
 
+%ndens = floor(100*max(max(ctrl.dens),max(schz.dens)));
 ndens = 35;
 
 for d = 1:1:ndens % density cut-off %ndens
-    disp(['edge density ' num2str(d) '%'])
-    
+    d
     dens_all = d/100;
     nedge_all = ceil(dens_all*(nroi*(nroi-1)/2));
     
@@ -995,22 +1176,20 @@ for d = 1:1:ndens % density cut-off %ndens
         temp_mat_dens = zeros(nroi);
         for j = 1:length(row)
             temp_mat_dens(row(j),col(j)) = ctrl.r(row(j),col(j),i); % weighted
-        end
+        end   
         ctrl.mat_dens_r(:,:,d,i) = temp_mat_dens+temp_mat_dens';
         
         % check connectedness
         [cmp,cmp_sizes] = get_components(ctrl.mat_dens_r(:,:,d,i));
         ctrl.dcmp_n_r(i,d) = length(unique(cmp));
         ctrl.dcmp_max_r(i,d) = max(cmp_sizes);
-        
+
         ctrl.eff_r(i,d) = efficiency_bin(double(logical(ctrl.mat_dens_r(:,:,d,i))));
         ctrl.trans_r(i,d) = transitivity_bu(double(logical(ctrl.mat_dens_r(:,:,d,i))));
-        
-        clear temp_r temp_mat_dens
     end
     
-    for i = 1:1:np %length(schz.did)
-        temp_r = schz.r(:,:,i); %schz.did(i)
+    for i = 1:1:np
+        temp_r = schz.r(:,:,i);
         [b,ix] = sort(temp_r(triu_ind),'descend'); % sort edges by value
         [row,col] = ind2sub([nroi,nroi],triu_ind(ix(1:nedge_all)));
         % fill new matrix
@@ -1027,8 +1206,6 @@ for d = 1:1:ndens % density cut-off %ndens
         
         schz.eff_r(i,d) = efficiency_bin(double(logical(schz.mat_dens_r(:,:,d,i))));
         schz.trans_r(i,d) = transitivity_bu(double(logical(schz.mat_dens_r(:,:,d,i))));
-        
-        clear temp_r temp_mat_dens
     end
     
 end
@@ -1046,6 +1223,9 @@ end
 % for confidence intervals (absolute value taken, as required for plotting)
 prct_l = 25; % lower percentile
 prct_h = 75; % upper percentile   
+
+prct_l = 25;
+prct_h = 75;
 
 for i = 1:1:ndens
     
@@ -1069,160 +1249,218 @@ for i = 1:1:ndens
     schz.m_dcmp_max_r(i) = median(schz.dcmp_max_r(:,i));
     schz.ci_dcmp_max_r(i,:) = abs(prctile(schz.dcmp_max_r(:,i),[prct_l prct_h])-schz.m_dcmp_max_r(i));
     
-    % ranksum (non-parametric test of difference) across densities r-thr ctrl VS schz
+    % ranksum across densities r-thr ctrl VS schz
     p_eff_r(i) = ranksum(ctrl.eff_r(:,i),schz.eff_r(:,i));
     p_trans_r(i) = ranksum(ctrl.trans_r(:,i),schz.trans_r(:,i));
     p_dcmp_n_r(i) = ranksum(ctrl.dcmp_n_r(:,i),schz.dcmp_n_r(:,i));
     p_dcmp_max_r(i) = ranksum(ctrl.dcmp_max_r(:,i),schz.dcmp_max_r(:,i));
     
+    % P sub 1
+    % ctrl
+    ctrl.m_eff_r_psub1(i) = median(ctrl.eff_r(ctrl.psub1_id{i},i));
+    ctrl.ci_eff_r_psub1(i,:) = abs(prctile(ctrl.eff_r(ctrl.psub1_id{i},i),[prct_l prct_h])-ctrl.m_eff_r_psub1(i));
+    ctrl.m_trans_r_psub1(i) = median(ctrl.trans_r(ctrl.psub1_id{i},i));
+    ctrl.ci_trans_r_psub1(i,:) = abs(prctile(ctrl.trans_r(ctrl.psub1_id{i},i),[prct_l prct_h])-ctrl.m_trans_r_psub1(i));
+    ctrl.m_dcmp_n_r_psub1(i) = median(ctrl.dcmp_n_r(ctrl.psub1_id{i},i));
+    ctrl.ci_dcmp_n_r_psub1(i,:) = abs(prctile(ctrl.dcmp_n_r(ctrl.psub1_id{i},i),[prct_l prct_h])-ctrl.m_dcmp_n_r_psub1(i));
+    ctrl.m_dcmp_max_r_psub1(i) = median(ctrl.dcmp_max_r(ctrl.psub1_id{i},i));
+    ctrl.ci_dcmp_max_r_psub1(i,:) = abs(prctile(ctrl.dcmp_max_r(ctrl.psub1_id{i},i),[prct_l prct_h])-ctrl.m_dcmp_max_r_psub1(i));
+
+    % schz
+    schz.m_eff_r_psub1(i) = median(schz.eff_r(schz.psub1_id{i},i));
+    schz.ci_eff_r_psub1(i,:) = abs(prctile(schz.eff_r(schz.psub1_id{i},i),[prct_l prct_h])-schz.m_eff_r_psub1(i));
+    schz.m_trans_r_psub1(i) = median(schz.trans_r(schz.psub1_id{i},i));
+    schz.ci_trans_r_psub1(i,:) = abs(prctile(schz.trans_r(schz.psub1_id{i},i),[prct_l prct_h])-schz.m_trans_r_psub1(i));
+    schz.m_dcmp_n_r_psub1(i) = median(schz.dcmp_n_r(schz.psub1_id{i},i));
+    schz.ci_dcmp_n_r_psub1(i,:) = abs(prctile(schz.dcmp_n_r(schz.psub1_id{i},i),[prct_l prct_h])-schz.m_dcmp_n_r_psub1(i));
+    schz.m_dcmp_max_r_psub1(i) = median(schz.dcmp_max_r(schz.psub1_id{i},i));
+    schz.ci_dcmp_max_r_psub1(i,:) = abs(prctile(schz.dcmp_max_r(schz.psub1_id{i},i),[prct_l prct_h])-schz.m_dcmp_max_r_psub1(i));
+    
+    % ranksum across densities r-thr ctrl VS schz
+    p_eff_r_psub1(i) = ranksum(ctrl.eff_r(ctrl.psub1_id{i},i),schz.eff_r(schz.psub1_id{i},i));
+    p_trans_r_psub1(i) = ranksum(ctrl.trans_r(ctrl.psub1_id{i},i),schz.trans_r(schz.psub1_id{i},i));
+    p_dcmp_n_r_psub1(i) = ranksum(ctrl.dcmp_n_r(ctrl.psub1_id{i},i),schz.dcmp_n_r(schz.psub1_id{i},i));
+    p_dcmp_max_r_psub1(i) = ranksum(ctrl.dcmp_max_r(ctrl.psub1_id{i},i),schz.dcmp_max_r(schz.psub1_id{i},i));
+    
 end
+
+ctrl.ci_eff_r = abs(ctrl.ci_eff_r); ctrl.ci_trans_r = abs(ctrl.ci_trans_r);
+schz.ci_eff_r = abs(schz.ci_eff_r); schz.ci_trans_r = abs(schz.ci_trans_r);
+
+ctrl.ci_dcmp_n_r = abs(ctrl.ci_dcmp_n_r); ctrl.ci_dcmp_max_r = abs(ctrl.ci_dcmp_max_r);
+schz.ci_dcmp_max_r = abs(schz.ci_dcmp_max_r); schz.ci_dcmp_max_r = abs(schz.ci_dcmp_max_r);
+
+ctrl.ci_eff_r_psub1 = abs(ctrl.ci_eff_r_psub1); ctrl.ci_trans_r_psub1 = abs(ctrl.ci_trans_r_psub1);
+schz.ci_eff_r_psub1 = abs(schz.ci_eff_r_psub1); schz.ci_trans_r_psub1 = abs(schz.ci_trans_r_psub1);
+
+ctrl.ci_dcmp_n_r_psub1 = abs(ctrl.ci_dcmp_n_r_psub1); ctrl.ci_dcmp_max_r_psub1 = abs(ctrl.ci_dcmp_max_r_psub1);
+schz.ci_dcmp_max_r_psub1 = abs(schz.ci_dcmp_max_r_psub1); schz.ci_dcmp_max_r_psub1 = abs(schz.ci_dcmp_max_r_psub1);
 
 for i = 1:1:ndens
-    
-    % ranksum across densities r-thr VS p-thr
+
+    % signrank across densities r-thr VS p-thr - PSUB1
     % ctrl
-    p_eff_rp_ctrl(i) = ranksum(ctrl.eff_r(:,i),ctrl.eff(:,i));
-    p_trans_rp_ctrl(i) = ranksum(ctrl.trans_r(:,i),ctrl.trans(:,i));
-    p_dcmp_n_rp_ctrl(i) = ranksum(ctrl.dcmp_n_r(:,i),ctrl.dcmp_n(:,i));
-    p_dcmp_max_rp_ctrl(i) = ranksum(ctrl.dcmp_max_r(:,i),ctrl.dcmp_max(:,i));
+    ppair_eff_rp_ctrl_psub1(i) = signrank(ctrl.eff_r(ctrl.psub1_id{i},i),ctrl.eff(ctrl.psub1_id{i},i));
+    ppair_trans_rp_ctrl_psub1(i) = signrank(ctrl.trans_r(ctrl.psub1_id{i},i),ctrl.trans(ctrl.psub1_id{i},i));
+    ppair_dcmp_n_rp_ctrl_psub1(i) = signrank(ctrl.dcmp_n_r(ctrl.psub1_id{i},i),ctrl.dcmp_n(ctrl.psub1_id{i},i));
+    ppair_dcmp_max_rp_ctrl_psub1(i) = signrank(ctrl.dcmp_max_r(ctrl.psub1_id{i},i),ctrl.dcmp_max(ctrl.psub1_id{i},i));
     
     % schz
-    p_eff_rp_schz(i) = ranksum(schz.eff_r(:,i),schz.eff(:,i));
-    p_trans_rp_schz(i) = ranksum(schz.trans_r(:,i),schz.trans(:,i));
-    p_dcmp_n_rp_schz(i) = ranksum(schz.dcmp_n_r(:,i),schz.dcmp_n(:,i));
-    p_dcmp_max_rp_schz(i) = ranksum(schz.dcmp_max_r(:,i),schz.dcmp_max(:,i));
+    ppair_eff_rp_schz_psub1(i) = signrank(schz.eff_r(schz.psub1_id{i},i),schz.eff(schz.psub1_id{i},i));
+    ppair_trans_rp_schz_psub1(i) = signrank(schz.trans_r(schz.psub1_id{i},i),schz.trans(schz.psub1_id{i},i));
+    ppair_dcmp_n_rp_schz_psub1(i) = signrank(schz.dcmp_n_r(schz.psub1_id{i},i),schz.dcmp_n(schz.psub1_id{i},i));
+    ppair_dcmp_max_rp_schz_psub1(i) = signrank(schz.dcmp_max_r(schz.psub1_id{i},i),schz.dcmp_max(schz.psub1_id{i},i));
     
 end
 
-for i = 1:1:ndens
-    
-    % signrank across densities r-thr VS p-thr
-    % ctrl
-    ppair_eff_rp_ctrl(i) = signrank(ctrl.eff_r(:,i),ctrl.eff(:,i));
-    ppair_trans_rp_ctrl(i) = signrank(ctrl.trans_r(:,i),ctrl.trans(:,i));
-    ppair_dcmp_n_rp_ctrl(i) = signrank(ctrl.dcmp_n_r(:,i),ctrl.dcmp_n(:,i));
-    ppair_dcmp_max_rp_ctrl(i) = signrank(ctrl.dcmp_max_r(:,i),ctrl.dcmp_max(:,i));
-    
-    % schz
-    ppair_eff_rp_schz(i) = signrank(schz.eff_r(:,i),schz.eff(:,i));
-    ppair_trans_rp_schz(i) = signrank(schz.trans_r(:,i),schz.trans(:,i));
-    ppair_dcmp_n_rp_schz(i) = signrank(schz.dcmp_n_r(:,i),schz.dcmp_n(:,i));
-    ppair_dcmp_max_rp_schz(i) = signrank(schz.dcmp_max_r(:,i),schz.dcmp_max(:,i));
-    
-end
-
-% within participant difference between r-thr and p-thr
+% within participant difference between r-thr and p-thr (subjects with P<1)
 % ctrl
-ctrl.d_eff = ctrl.eff-ctrl.eff_r;
-ctrl.d_trans = ctrl.trans-ctrl.trans_r;
-ctrl.d_dcmp_n = ctrl.dcmp_n-ctrl.dcmp_n_r;
-
-ctrl.m_d_eff = median(ctrl.d_eff);
-ctrl.m_d_trans = median(ctrl.d_trans);
-ctrl.m_d_dcmp_n = median(ctrl.d_dcmp_n);
-
+ctrl.d_eff_psub1 = nan(nc,ndens);
+ctrl.d_trans_psub1 = nan(nc,ndens);
+ctrl.d_dcmp_n_psub1 = nan(nc,ndens);
 for i = 1:1:ndens
-    ctrl.ci_d_eff(i,:) = prctile(ctrl.d_eff(:,i),[prct_l prct_h])-ctrl.m_d_eff(i);
-    ctrl.ci_d_trans(i,:) = prctile(ctrl.d_trans(:,i),[prct_l prct_h])-ctrl.m_d_trans(i);
-    ctrl.ci_d_dcmp_n(i,:) = prctile(ctrl.d_dcmp_n(:,i),[prct_l prct_h])-ctrl.m_d_dcmp_n(i);
+    ctrl.d_eff_psub1(ctrl.psub1_id{i},i) = ctrl.eff(ctrl.psub1_id{i},i)-ctrl.eff_r(ctrl.psub1_id{i},i);
+    ctrl.d_trans_psub1(ctrl.psub1_id{i},i) = ctrl.trans(ctrl.psub1_id{i},i)-ctrl.trans_r(ctrl.psub1_id{i},i);
+    ctrl.d_dcmp_n_psub1(ctrl.psub1_id{i},i) = ctrl.dcmp_n(ctrl.psub1_id{i},i)-ctrl.dcmp_n_r(ctrl.psub1_id{i},i);
+    
+    ctrl.m_d_eff_psub1(i) = median(ctrl.d_eff_psub1(ctrl.psub1_id{i},i));
+    ctrl.m_d_trans_psub1(i) = median(ctrl.d_trans_psub1(ctrl.psub1_id{i},i));
+    ctrl.m_d_dcmp_n_psub1(i) = median(ctrl.d_dcmp_n_psub1(ctrl.psub1_id{i},i));
+    
+    ctrl.ci_d_eff_psub1(i,:) = abs(prctile(ctrl.d_eff_psub1(ctrl.psub1_id{i},i),[prct_l prct_h])-ctrl.m_d_eff_psub1(i));
+    ctrl.ci_d_trans_psub1(i,:) = abs(prctile(ctrl.d_trans_psub1(ctrl.psub1_id{i},i),[prct_l prct_h])-ctrl.m_d_trans_psub1(i));
+    ctrl.ci_d_dcmp_n_psub1(i,:) = abs(prctile(ctrl.d_dcmp_n_psub1(ctrl.psub1_id{i},i),[prct_l prct_h])-ctrl.m_d_dcmp_n_psub1(i));
 end
-
-ctrl.ci_d_eff = abs(ctrl.ci_d_eff); ctrl.ci_d_trans = abs(ctrl.ci_d_trans); ctrl.ci_d_dcmp_n = abs(ctrl.ci_d_dcmp_n);
 
 % schz
-schz.d_eff = schz.eff-schz.eff_r;
-schz.d_trans = schz.trans-schz.trans_r;
-schz.d_dcmp_n = schz.dcmp_n-schz.dcmp_n_r;
-
-schz.m_d_eff = median(schz.d_eff);
-schz.m_d_trans = median(schz.d_trans);
-schz.m_d_dcmp_n = median(schz.d_dcmp_n);
-
+schz.d_eff_psub1 = nan(nc,ndens);
+schz.d_trans_psub1 = nan(nc,ndens);
+schz.d_dcmp_n_psub1 = nan(nc,ndens);
 for i = 1:1:ndens
-    schz.ci_d_eff(i,:) = prctile(schz.d_eff(:,i),[prct_l prct_h])-schz.m_d_eff(i);
-    schz.ci_d_trans(i,:) = prctile(schz.d_trans(:,i),[prct_l prct_h])-schz.m_d_trans(i);
-    schz.ci_d_dcmp_n(i,:) = prctile(schz.d_dcmp_n(:,i),[prct_l prct_h])-schz.m_d_dcmp_n(i);
+    schz.d_eff_psub1(schz.psub1_id{i},i) = schz.eff(schz.psub1_id{i},i)-schz.eff_r(schz.psub1_id{i},i);
+    schz.d_trans_psub1(schz.psub1_id{i},i) = schz.trans(schz.psub1_id{i},i)-schz.trans_r(schz.psub1_id{i},i);
+    schz.d_dcmp_n_psub1(schz.psub1_id{i},i) = schz.dcmp_n(schz.psub1_id{i},i)-schz.dcmp_n_r(schz.psub1_id{i},i);
+    
+    schz.m_d_eff_psub1(i) = median(schz.d_eff_psub1(schz.psub1_id{i},i));
+    schz.m_d_trans_psub1(i) = median(schz.d_trans_psub1(schz.psub1_id{i},i));
+    schz.m_d_dcmp_n_psub1(i) = median(schz.d_dcmp_n_psub1(schz.psub1_id{i},i));
+    
+    schz.ci_d_eff_psub1(i,:) = abs(prctile(schz.d_eff_psub1(schz.psub1_id{i},i),[prct_l prct_h])-schz.m_d_eff_psub1(i));
+    schz.ci_d_trans_psub1(i,:) = abs(prctile(schz.d_trans_psub1(schz.psub1_id{i},i),[prct_l prct_h])-schz.m_d_trans_psub1(i));
+    schz.ci_d_dcmp_n_psub1(i,:) = abs(prctile(schz.d_dcmp_n_psub1(schz.psub1_id{i},i),[prct_l prct_h])-schz.m_d_dcmp_n_psub1(i));
 end
 
-schz.ci_d_eff = abs(schz.ci_d_eff); schz.ci_d_trans = abs(schz.ci_d_trans); schz.ci_d_dcmp_n = abs(schz.ci_d_dcmp_n);
+%% r VS P (P < 1)
 
-%% compare P and R thresholded connectomes
+fsize = 30;
+fsize2 = 20;
+
+% ctrl (r VS P)
+
+% % efficiency
+% boundedline_plot(1:ndens,ctrl.m_eff_r_psub1,ctrl.ci_eff_r_psub1,ctrl.m_eff_psub1,ctrl.ci_eff_psub1,...
+%     ctrl.col_r,ctrl.col,alph,NaN,ppair_eff_rp_ctrl_psub1,'edge density \rho (%)','efficiency','ctrl r','ctrl p',[0 ndens+1],[0 0.8],fsize,fsize2,...
+%     plot_path,['eff_ctrl_r_vs_p_psub1_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
+% 
+% % transitivity
+% boundedline_plot(1:ndens,ctrl.m_trans_r_psub1,ctrl.ci_trans_r_psub1,ctrl.m_trans_psub1,ctrl.ci_trans_psub1,...
+%     ctrl.col_r,ctrl.col,alph,NaN,ppair_trans_rp_ctrl_psub1,'edge density \rho (%)','transitivity','ctrl r','ctrl p',[0 ndens+1],[0.3 0.9],fsize,fsize2,...
+%     plot_path,['trans_ctrl_r_vs_p_psub1_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
+
+%%% difference
+
+% efficiency
+boundedline_plot_one(1:ndens,ctrl.m_d_eff_psub1,ctrl.ci_d_eff_psub1,ctrl.col,alph,ppair_eff_rp_ctrl_psub1,'edge density \rho (%)','\Delta eff. (P_{thr}-r_{thr})',[0 ndens+1],[-0.005 0.005],fsize,fsize2,...
+    plot_path,['d_eff_ctrl_r_vs_p_psub1_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
+
+% transitivity
+boundedline_plot_one(1:ndens,ctrl.m_d_trans_psub1,ctrl.ci_d_trans_psub1,ctrl.col,alph,ppair_trans_rp_ctrl_psub1,'edge density \rho (%)','\Delta trans. (P_{thr}-r_{thr})',[0 ndens+1],[-0.005 0.005],fsize,fsize2,...
+    plot_path,['d_trans_ctrl_r_vs_p_psub1_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
+
+% schz (r VS P)
+
+% % efficiency
+% boundedline_plot(1:ndens,schz.m_eff_r_psub1,schz.ci_eff_r_psub1,schz.m_eff_psub1,schz.ci_eff_psub1,...
+%     schz.col_r,schz.col,alph,NaN,ppair_eff_rp_schz_psub1,'edge density \rho (%)','efficiency','schz r','schz p',[0 ndens+1],[0 0.8],fsize,fsize2,...
+%     plot_path,['eff_schz_r_vs_p_psub1_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
+% 
+% % transitivity
+% boundedline_plot(1:ndens,schz.m_trans_r_psub1,schz.ci_trans_r_psub1,schz.m_trans_psub1,schz.ci_trans_psub1,...
+%     schz.col_r,schz.col,alph,NaN,ppair_trans_rp_schz_psub1,'edge density \rho (%)','transitivity','schz r','schz p',[0 ndens+1],[0.3 0.9],fsize,fsize2,...
+%     plot_path,['trans_schz_r_vs_p_psub1_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
+
+%%% difference
+
+% efficiency
+boundedline_plot_one(1:ndens,schz.m_d_eff_psub1,schz.ci_d_eff_psub1,schz.col,alph,ppair_eff_rp_schz_psub1,'edge density \rho (%)','\Delta eff. (P_{thr}-r_{thr})',[0 ndens+1],[-0.005 0.005],fsize,fsize2,...
+    plot_path,['d_eff_schz_r_vs_p_psub1_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
+
+% transitivity
+boundedline_plot_one(1:ndens,schz.m_d_trans_psub1,schz.ci_d_trans_psub1,schz.col,alph,ppair_trans_rp_schz_psub1,'edge density \rho (%)','\Delta trans. (P_{thr}-r_{thr})',[0 ndens+1],[-0.005 0.005],fsize,fsize2,...
+    plot_path,['d_trans_schz_r_vs_p_psub1_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
+
+%% compare R and P thresholded connectomes (cut-off when P=1 reached)
 
 % number of edges that are the same
+ctrl.rp_overlap = nan(ndens,nc);
+schz.rp_overlap = nan(ndens,np);
 for d = 1:1:ndens
-    disp(['edge density ' num2str(d) '%'])
-        
+    d
+
     % ctrl
-    for i = 1:1:nc
+    for i = ctrl.psub1_id{d}
         ctrl.rp_overlap(d,i) = length(intersect(intersect(find(ctrl.mat_dens_r(:,:,d,i)),triu_ind),intersect(find(ctrl.mat_dens(:,:,d,i)),triu_ind)))/length(intersect(find(ctrl.mat_dens(:,:,d,i)),triu_ind));
     end
     
     % schz
-    for i = 1:1:np
+    for i = schz.psub1_id{d}
         schz.rp_overlap(d,i) = length(intersect(intersect(find(schz.mat_dens_r(:,:,d,i)),triu_ind),intersect(find(schz.mat_dens(:,:,d,i)),triu_ind)))/length(intersect(find(schz.mat_dens(:,:,d,i)),triu_ind));
     end
     
 end
 
-fise = 30;
+fsize = 30;
 fsize2 = 20;
 
 % plots
 
-%%% RELATIVE
+line_alpha = 0.5;
 
+%%% separate plot for each group
+
+%%% controls
 figure;
 hold on
 for i = 1:1:nc; hc = plot(1:ndens,100*(1-ctrl.rp_overlap(:,i)),'Color',ctrl.col_light,'LineWidth',lwd_ind); end
-for i = 1:1:np; hp = plot(1:ndens,100*(1-schz.rp_overlap(:,i)),'Color',schz.col_light,'LineWidth',lwd_ind); end
-hca = plot(1:ndens,100*(1-mean(ctrl.rp_overlap,2)),'Color',ctrl.col*col_ind,'LineWidth',lwd);
-hpa = plot(1:ndens,100*(1-mean(schz.rp_overlap,2)),'Color',schz.col*0.8,'LineWidth',lwd);
+hca = plot(1:ndens,100*(1-nanmean(ctrl.rp_overlap,2)),'Color',ctrl.col*col_ind,'LineWidth',lwd);
 hold off
 
 set(gca,'FontSize',fsize2); box off
 xlabel('edge density \rho (%)','FontSize',fsize,'FontName','Arial');
-ylabel('r/P thr. edge diff. (%)','FontSize',fsize,'FontName','Arial');
+ylabel('\Delta edges (%)','FontSize',fsize,'FontName','Arial');
+xlim([0 ndens+1]); ylim([-1,15]); set(gca,'YTick',[0:5:15])
 
 pos = get(gcf,'Position');
 set(gcf,'Position', [pos(1) pos(2) 1.25*pos(3) 0.70*pos(4)]); set(gcf,'color','w');
 
-xlim([0 ndens+1]); 
-ylim([-1,65])
-set(gca,'YTick',[0:15:60])
+print([plot_path 'cobre_rp_diff_ctrl.png'],'-dpng')
 
-% inset limit box
-rpi = -1; rpf = 11;
-rhoi = 0.95; rhof = 5.05;
-
-hold on
-plot([rhoi rhof],[rpi rpi],'k','LineWidth',2) % horiz bottom
-plot([rhoi rhof],[rpf rpf],'k','LineWidth',2) % horiz top
-plot([rhoi rhoi],[rpi rpf],'k','LineWidth',2) % vert left
-plot([rhof rhof],[rpi rpf],'k','LineWidth',2) % vert right
-hold off;
-
-print([plot_path 'cobre_rp_diff_full.png'],'-dpng')
-
-% inset
+%%% schizophrenia
 figure;
 hold on
-for i = 1:1:nc; hc = plot(1:ndens,100*(1-ctrl.rp_overlap(:,i)),'Color',ctrl.col_light,'LineWidth',lwd_ind); end
 for i = 1:1:np; hp = plot(1:ndens,100*(1-schz.rp_overlap(:,i)),'Color',schz.col_light,'LineWidth',lwd_ind); end
-hca = plot(1:ndens,100*(1-mean(ctrl.rp_overlap,2)),'Color',ctrl.col*col_ind,'LineWidth',lwd);
-hpa = plot(1:ndens,100*(1-mean(schz.rp_overlap,2)),'Color',schz.col*0.8,'LineWidth',lwd);
+hpa = plot(1:ndens,100*(1-nanmean(schz.rp_overlap,2)),'Color',schz.col*0.8,'LineWidth',lwd);
 hold off
 
-set(gca,'FontSize',fsize2);
+set(gca,'FontSize',fsize2); box off
+xlabel('edge density \rho (%)','FontSize',fsize,'FontName','Arial');
+ylabel('\Delta edges (%)','FontSize',fsize,'FontName','Arial');
+xlim([0 ndens+1]); ylim([-1,15]); set(gca,'YTick',[0:5:15])
 
-xlim([rhoi rhof])
-ylim([rpi rpf])
+pos = get(gcf,'Position');
+set(gcf,'Position', [pos(1) pos(2) 1.25*pos(3) 0.70*pos(4)]); set(gcf,'color','w');
 
-set(gca,'FontSize',fsize2); %box off
-set(gca,'YTick',[0 5 10])
-set(gca,'XTick',[1 3 5])
-set(gcf,'color','w');
-
-print([plot_path 'cobre_rp_diff_inset.png'],'-dpng')
+print([plot_path 'cobre_rp_diff_schz.png'],'-dpng')
 
 %% r vs P
 
@@ -1285,102 +1523,381 @@ set(gcf,'color','w');
 
 export_fig([plot_path 'rp_rel_inset.pdf'],'-pdf','-nocrop')
 
-%% r VS P
+%% consistency of edges (P<1 only, for both P and r thresholds)
 
-fsize = 30;
-fsize2 = 20;
+% within-group consistency (how many times is each edge present across the
+% group, at each density and for each thresholding method?)
+for d = 1:1:ndens
 
-% ctrl (r VS P)
+    % ctrl
+    ctrl.r_overlap(:,:,d) = sum(squeeze(logical(ctrl.mat_dens_r(:,:,d,ctrl.psub1_id{d}))),3);
+    ctrl.p_overlap(:,:,d) = sum(squeeze(logical(ctrl.mat_dens(:,:,d,ctrl.psub1_id{d}))),3);
+    % schz
+    schz.r_overlap(:,:,d) = sum(squeeze(logical(schz.mat_dens_r(:,:,d,schz.psub1_id{d}))),3);
+    schz.p_overlap(:,:,d) = sum(squeeze(logical(schz.mat_dens(:,:,d,schz.psub1_id{d}))),3);
 
-% efficiency
-boundedline_plot(1:ndens,ctrl.m_eff_r,ctrl.ci_eff_r,ctrl.m_eff,ctrl.ci_eff,...
-    ctrl.col_r,ctrl.col,alph,NaN,ppair_eff_rp_ctrl,'edge density \rho (%)','efficiency','ctrl r','ctrl p',[0 ndens+1],[0 0.8],fsize,fsize2,...
-    plot_path,['eff_ctrl_r_vs_p_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
+end
 
-% transitivity
-boundedline_plot(1:ndens,ctrl.m_trans_r,ctrl.ci_trans_r,ctrl.m_trans,ctrl.ci_trans,...
-    ctrl.col_r,ctrl.col,alph,NaN,ppair_trans_rp_ctrl,'edge density \rho (%)','transitivity','ctrl r','ctrl p',[0 ndens+1],[0.3 0.9],fsize,fsize2,...
-    plot_path,['trans_ctrl_r_vs_p_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
+% frequencies of overlap - count the number of edges at each level of consistency
+comb_tbl_r = zeros(ndens,nc+np+1);
+comb_tbl_p = zeros(ndens,nc+np+1);
+for d = 1:1:ndens
 
-% # components
-boundedline_plot(1:ndens,ctrl.m_dcmp_n_r,ctrl.ci_dcmp_n_r,ctrl.m_dcmp_n,ctrl.ci_dcmp_n,...
-    ctrl.col_r,ctrl.col,alph,NaN,ppair_dcmp_n_rp_ctrl,'edge density \rho (%)','# conn. comp.','ctrl r','ctrl p',[0 ndens+1],[0 150],fsize,fsize2,...
-    plot_path,['dcmp_n_ctrl_r_vs_p_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
+    %%% ctrl
+    % r
+    temp_ctrl = ctrl.r_overlap(:,:,d);
+    tbl1_r = tabulate(temp_ctrl(triu_ind));
+    ctrl.tbl_r(d,tbl1_r(:,1)+1) = tbl1_r(:,2);
+    % p
+    temp_ctrl = ctrl.p_overlap(:,:,d);
+    tbl1_p = tabulate(temp_ctrl(triu_ind)); %
+    ctrl.tbl_p(d,tbl1_p(:,1)+1) = tbl1_p(:,2);
+    %%% schz
+    % r
+    temp_ctrl = schz.r_overlap(:,:,d);
+    tbl1_r = tabulate(temp_ctrl(triu_ind));
+    schz.tbl_r(d,tbl1_r(:,1)+1) = tbl1_r(:,2);
+    % p
+    temp_ctrl = schz.p_overlap(:,:,d);
+    tbl1_p = tabulate(temp_ctrl(triu_ind));
+    schz.tbl_p(d,tbl1_p(:,1)+1) = tbl1_p(:,2);
 
-% size of largest component
-boundedline_plot(1:ndens,ctrl.m_dcmp_max_r,ctrl.ci_dcmp_max_r,ctrl.m_dcmp_max,ctrl.ci_dcmp_max,...
-    ctrl.col_r,ctrl.col,alph,NaN,ppair_dcmp_max_rp_ctrl,'edge density \rho (%)','max(comp. size)','ctrl r','ctrl p',[0 ndens+1],[200 450],fsize,fsize2,...
-    plot_path,['dcmp_max_ctrl_r_vs_p_rthr_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
+end
 
-%%% difference
+% difference in frequencies
+ctrl.tbl_d = ctrl.tbl_p-ctrl.tbl_r; 
+schz.tbl_d = schz.tbl_p-schz.tbl_r; 
 
-% efficiency
-boundedline_plot_one(1:ndens,ctrl.m_d_eff,ctrl.ci_d_eff,rgb('darkorchid'),alph,ppair_eff_rp_ctrl,'edge density \rho (%)','\Delta efficiency',[0 ndens+1],[-0.004 0.004],fsize,fsize2,...
-    plot_path,['d_eff_ctrl_r_vs_p_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
+% set RHS of plots (corresponding to subjects with P=1) to NaN
+for d = 1:1:ndens
+    
+    % r
+    ctrl.tbl_r(d,(length(ctrl.psub1_id{d})+2):end) = NaN;
+    schz.tbl_r(d,(length(schz.psub1_id{d})+2):end) = NaN;
 
-% transitivity
-boundedline_plot_one(1:ndens,ctrl.m_d_trans,ctrl.ci_d_trans,rgb('darkorchid'),alph,ppair_trans_rp_ctrl,'edge density \rho (%)','\Delta transitivity',[0 ndens+1],[-0.006 0.006],fsize,fsize2,...
-    plot_path,['d_trans_ctrl_r_vs_p_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
+    % p
+    ctrl.tbl_p(d,(length(ctrl.psub1_id{d})+2):end) = NaN;
+    schz.tbl_p(d,(length(schz.psub1_id{d})+2):end) = NaN;
 
-% # components
-boundedline_plot_one(1:ndens,ctrl.m_d_dcmp_n,ctrl.ci_d_dcmp_n,rgb('darkorchid'),alph,ppair_dcmp_n_rp_ctrl,'edge density \rho (%)','\Delta # conn. comp.',[0 ndens+1],[-1.5 2.5],fsize,fsize2,...
-    plot_path,['d_dcmp_n_ctrl_r_vs_p_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
+    % diff
+    ctrl.tbl_d(d,(length(ctrl.psub1_id{d})+2):end) = NaN;
+    schz.tbl_d(d,(length(schz.psub1_id{d})+2):end) = NaN;
 
-% schz (r VS P)
+end
 
-% efficiency
-boundedline_plot(1:ndens,schz.m_eff_r,schz.ci_eff_r,schz.m_eff,schz.ci_eff,...
-    schz.col_r,schz.col,alph,NaN,ppair_eff_rp_schz,'edge density \rho (%)','efficiency','schz r','schz p',[0 ndens+1],[0 0.8],fsize,fsize2,...
-    plot_path,['eff_schz_r_vs_p_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
+%%%
+% % frequency plots by group and method (not plotted in manuscript)
+% % this is an intermediate step to the *difference of frequencies*
+% % ctrl - r
+% temp = log10(ctrl.tbl_r); temp(isnan(temp)) = max(log10(ctrl.tbl_r(:)))+0.1;
+% figure; imagesc(temp); axis xy; c = colorbar; cmap = colormap(parula); 
+% cmap(end,:) = rgb('whitesmoke'); colormap(cmap)
+% hold on; for d = 1:1:ndens % add black line
+%     plot([length(ctrl.psub1_id{d})+1.5 length(ctrl.psub1_id{d})+1.5],[d-0.5 d+0.5],'k','linewidth',1); % vertical segment - 1.5 extra in x-coord = 1 (count starts from 0) + 0.5 (imagesc alignment)
+%     if d < 35; if length(ctrl.psub1_id{d}) > length(ctrl.psub1_id{d+1}); plot([length(ctrl.psub1_id{d})+1.5-(length(ctrl.psub1_id{d})-length(ctrl.psub1_id{d+1})) length(ctrl.psub1_id{d})+1.5],[d+0.5 d+0.5],'k','linewidth',1); end; end
+% end; hold off
+% set(gca,'FontSize',fsize2); set(gca,'XTick',[1:5:(nc+1)],'XTickLabel',[(1:5:(nc+1))-1])
+% xlabel('consistency (# participants)','FontSize',fsize,'FontName','Arial');
+% ylabel('edge density \rho (%)','FontSize',fsize,'FontName','Arial');
+% ylabel(c,'frequency (# edges)','Rotation',-90,'VerticalAlignment','bottom','FontSize',fsize,'FontName','Arial'); % 
+% set(gcf,'color','w');
+% pos = get(gcf,'Position'); set(gcf,'Position', [pos(1) pos(2) 1.5*pos(3) pos(4)]);
+% print([plot_path '/cobre_r_consistency_ctrl.png'],'-dpng')
+% 
+% % ctrl - p
+% temp = log10(ctrl.tbl_p); temp(isnan(temp)) = max(log10(ctrl.tbl_p(:)))+0.1;
+% figure; imagesc(temp); axis xy; c = colorbar; cmap = colormap(parula); 
+% cmap(end,:) = rgb('whitesmoke'); colormap(cmap)
+% hold on; for d = 1:1:ndens % add black line
+%     plot([length(ctrl.psub1_id{d})+1.5 length(ctrl.psub1_id{d})+1.5],[d-0.5 d+0.5],'k','linewidth',1); % vertical segment - 1.5 extra in x-coord = 1 (count starts from 0) + 0.5 (imagesc alignment)
+%     if d < 35; if length(ctrl.psub1_id{d}) > length(ctrl.psub1_id{d+1}); plot([length(ctrl.psub1_id{d})+1.5-(length(ctrl.psub1_id{d})-length(ctrl.psub1_id{d+1})) length(ctrl.psub1_id{d})+1.5],[d+0.5 d+0.5],'k','linewidth',1); end; end
+% end; hold off
+% set(gca,'FontSize',fsize2); set(gca,'XTick',[1:5:(nc+1)],'XTickLabel',[(1:5:(nc+1))-1])
+% xlabel('consistency (# participants)','FontSize',fsize,'FontName','Arial');
+% ylabel('edge density \rho (%)','FontSize',fsize,'FontName','Arial');
+% ylabel(c,'frequency (# edges)','Rotation',-90,'VerticalAlignment','bottom','FontSize',fsize,'FontName','Arial'); % 
+% set(gcf,'color','w');
+% pos = get(gcf,'Position'); set(gcf,'Position', [pos(1) pos(2) 1.5*pos(3) pos(4)]);
+% print([plot_path '/cobre_p_consistency_ctrl.png'],'-dpng')
+% 
+% % schz - r
+% temp = log10(schz.tbl_r); temp(isnan(temp)) = max(log10(schz.tbl_r(:)))+0.1;
+% figure; imagesc(temp); axis xy; c = colorbar; cmap = colormap(parula); 
+% cmap(end,:) = rgb('whitesmoke'); colormap(cmap)
+% hold on; for d = 1:1:ndens % add black line
+%     plot([length(schz.psub1_id{d})+1.5 length(schz.psub1_id{d})+1.5],[d-0.5 d+0.5],'k','linewidth',1); % vertical segment - 1.5 extra in x-coord = 1 (count starts from 0) + 0.5 (imagesc alignment)
+%     if d < 35; if length(schz.psub1_id{d}) > length(schz.psub1_id{d+1}); plot([length(schz.psub1_id{d})+1.5-(length(schz.psub1_id{d})-length(schz.psub1_id{d+1})) length(schz.psub1_id{d})+1.5],[d+0.5 d+0.5],'k','linewidth',1); end; end
+% end; hold off
+% set(gca,'FontSize',fsize2); set(gca,'XTick',[1:5:(nc+1)],'XTickLabel',[(1:5:(nc+1))-1])
+% xlabel('consistency (# participants)','FontSize',fsize,'FontName','Arial');
+% ylabel('edge density \rho (%)','FontSize',fsize,'FontName','Arial');
+% ylabel(c,'frequency (# edges)','Rotation',-90,'VerticalAlignment','bottom','FontSize',fsize,'FontName','Arial'); % 
+% set(gcf,'color','w');
+% pos = get(gcf,'Position'); set(gcf,'Position', [pos(1) pos(2) 1.5*pos(3) pos(4)]);
+% print([plot_path '/cobre_r_consistency_schz.png'],'-dpng')
+% 
+% % schz - p
+% temp = log10(schz.tbl_p); temp(isnan(temp)) = max(log10(schz.tbl_p(:)))+0.1;
+% figure; imagesc(temp); axis xy; c = colorbar; cmap = colormap(parula); 
+% cmap(end,:) = rgb('whitesmoke'); colormap(cmap)
+% hold on; for d = 1:1:ndens % add black line
+%     plot([length(schz.psub1_id{d})+1.5 length(schz.psub1_id{d})+1.5],[d-0.5 d+0.5],'k','linewidth',1); % vertical segment - 1.5 extra in x-coord = 1 (count starts from 0) + 0.5 (imagesc alignment)
+%     if d < 35; if length(schz.psub1_id{d}) > length(schz.psub1_id{d+1}); plot([length(schz.psub1_id{d})+1.5-(length(schz.psub1_id{d})-length(schz.psub1_id{d+1})) length(schz.psub1_id{d})+1.5],[d+0.5 d+0.5],'k','linewidth',1); end; end
+% end; hold off
+% set(gca,'FontSize',fsize2); set(gca,'XTick',[1:5:(nc+1)],'XTickLabel',[(1:5:(nc+1))-1])
+% xlabel('consistency (# participants)','FontSize',fsize,'FontName','Arial');
+% ylabel('edge density \rho (%)','FontSize',fsize,'FontName','Arial');
+% ylabel(c,'frequency (# edges)','Rotation',-90,'VerticalAlignment','bottom','FontSize',fsize,'FontName','Arial'); % 
+% set(gcf,'color','w');
+% pos = get(gcf,'Position'); set(gcf,'Position', [pos(1) pos(2) 1.5*pos(3) pos(4)]);
+% print([plot_path '/cobre_p_consistency_schz.png'],'-dpng')
+%%%
 
-% transitivity
-boundedline_plot(1:ndens,schz.m_trans_r,schz.ci_trans_r,schz.m_trans,schz.ci_trans,...
-    schz.col_r,schz.col,alph,NaN,ppair_trans_rp_schz,'edge density \rho (%)','transitivity','schz r','schz p',[0 ndens+1],[0.3 0.9],fsize,fsize2,...
-    plot_path,['trans_schz_r_vs_p_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
+% difference plots (with permutation P value markers, obtained using code "pr_thr_consistency_perm)
+load('pr_thr_consistency_perm_psub1.mat')
+nperm = size(ctrl_tbl_d_perm,3);
 
-% # components
-boundedline_plot(1:ndens,schz.m_dcmp_n_r,schz.ci_dcmp_n_r,schz.m_dcmp_n,schz.ci_dcmp_n,...
-    schz.col_r,schz.col,alph,NaN,ppair_dcmp_n_rp_schz,'edge density \rho (%)','# conn. comp.','schz r','schz p',[0 ndens+1],[0 150],fsize,fsize2,...
-    plot_path,['dcmp_n_schz_r_vs_p_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
+% compare empirical difference to permuted differences - ctrl
+for d = 1:1:ndens 
+    for i = 1:1:(length(ctrl.psub1_id{d})+1)
+        if ctrl.tbl_d(d,i) >= 0
+            ctrl.tbl_d_p(d,i) = sum(ctrl_tbl_d_perm(d,i,:)>ctrl.tbl_d(d,i))/nperm;
+        elseif ctrl.tbl_d(d,i) < 0
+            ctrl.tbl_d_p(d,i) = sum(ctrl_tbl_d_perm(d,i,:)<ctrl.tbl_d(d,i))/nperm;
+        end
+    end
+end
 
-% size of largest component
-boundedline_plot(1:ndens,schz.m_dcmp_max_r,schz.ci_dcmp_max_r,schz.m_dcmp_max,schz.ci_dcmp_max,...
-    schz.col_r,schz.col,alph,NaN,ppair_dcmp_max_rp_schz,'edge density \rho (%)','max(comp. size)','schz r','schz p',[0 ndens+1],[200 450],fsize,fsize2,...
-    plot_path,['dcmp_max_schz_r_vs_p_rthr_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
+% plot - ctrl
+temp = ctrl.tbl_d; temp(isnan(temp)) = min(-max(abs(ctrl.tbl_d(:)))-1);
+figure; imagesc(temp); axis xy; c = colorbar; cmap = colormap(redblue); 
+caxis([-max(abs(ctrl.tbl_d(:))),max(abs(ctrl.tbl_d(:)))]); cmap(1,:) = rgb('whitesmoke'); colormap(cmap)
+hold on; for d = 1:1:ndens % add black line
+    plot([length(ctrl.psub1_id{d})+1.5 length(ctrl.psub1_id{d})+1.5],[d-0.5 d+0.5],'k','linewidth',1); % vertical segment - 1.5 extra in x-coord = 1 (count starts from 0) + 0.5 (imagesc alignment)
+    if d < 35; if length(ctrl.psub1_id{d}) > length(ctrl.psub1_id{d+1}); plot([length(ctrl.psub1_id{d})+1.5-(length(ctrl.psub1_id{d})-length(ctrl.psub1_id{d+1})) length(ctrl.psub1_id{d})+1.5],[d+0.5 d+0.5],'k','linewidth',1); end; end
+end
+%%% P value markers
+for d = 1:1:ndens
+    for i = 1:1:(length(ctrl.psub1_id{d})+1)
+        if ctrl.tbl_d_p(d,i) < 0.01
+            scatter(i,d,5,'filled','MarkerFaceColor','black','MarkerEdgeColor','black')
+        end
+    end
+end
+%%%
+hold off
+set(gca,'FontSize',fsize2); set(gca,'XTick',[1:5:(nc+1)],'XTickLabel',[(1:5:(nc+1))-1])
+xlabel('consistency (# participants)','FontSize',fsize,'FontName','Arial');
+ylabel('edge density \rho (%)','FontSize',fsize,'FontName','Arial');
+ylabel(c,'\Delta frequency (# edges)','Rotation',-90,'VerticalAlignment','bottom','FontSize',fsize,'FontName','Arial'); % 
+set(gcf,'color','w');
+pos = get(gcf,'Position'); set(gcf,'Position', [pos(1) pos(2) 1.5*pos(3) pos(4)]);
+print([plot_path '/cobre_rp_d_consistency_ctrl_pmarkers.png'],'-dpng')
 
-%%% difference
+% compare empirical difference to permuted differences - schz
+for d = 1:1:ndens
+    for i = 1:1:(length(schz.psub1_id{d})+1)
+        if schz.tbl_d(d,i) >= 0
+            schz.tbl_d_p(d,i) = sum(schz_tbl_d_perm(d,i,:)>schz.tbl_d(d,i))/nperm;
+        elseif schz.tbl_d(d,i) < 0
+            schz.tbl_d_p(d,i) = sum(schz_tbl_d_perm(d,i,:)<schz.tbl_d(d,i))/nperm;
+        end
+    end
+end
 
-% efficiency
-boundedline_plot_one(1:ndens,schz.m_d_eff,schz.ci_d_eff,rgb('orangered'),alph,ppair_eff_rp_schz,'edge density \rho (%)','\Delta efficiency',[0 ndens+1],[-0.007 0.007],fsize,fsize2,...
-    plot_path,['d_eff_schz_r_vs_p_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
+% plot - schz
+temp = schz.tbl_d; temp(isnan(temp)) = min(-max(abs(schz.tbl_d(:)))-1);
+figure; imagesc(temp); axis xy; c = colorbar; cmap = colormap(redblue); 
+caxis([-max(abs(schz.tbl_d(:))),max(abs(schz.tbl_d(:)))]); cmap(1,:) = rgb('whitesmoke'); colormap(cmap)
+hold on; for d = 1:1:ndens % add black line
+    plot([length(schz.psub1_id{d})+1.5 length(schz.psub1_id{d})+1.5],[d-0.5 d+0.5],'k','linewidth',1); % vertical segment - 1.5 extra in x-coord = 1 (count starts from 0) + 0.5 (imagesc alignment)
+    if d < 35; if length(schz.psub1_id{d}) > length(schz.psub1_id{d+1}); plot([length(schz.psub1_id{d})+1.5-(length(schz.psub1_id{d})-length(schz.psub1_id{d+1})) length(schz.psub1_id{d})+1.5],[d+0.5 d+0.5],'k','linewidth',1); end; end
+end
+%%% P value markers
+for d = 1:1:ndens
+    for i = 1:1:(length(schz.psub1_id{d})+1)
+        if schz.tbl_d_p(d,i) < 0.01
+            scatter(i,d,5,'filled','MarkerFaceColor','black','MarkerEdgeColor','black')
+        end
+    end
+end
+%%%
+hold off
+set(gca,'FontSize',fsize2); set(gca,'XTick',[1:5:(nc+1)],'XTickLabel',[(1:5:(nc+1))-1])
+xlabel('consistency (# participants)','FontSize',fsize,'FontName','Arial');
+ylabel('edge density \rho (%)','FontSize',fsize,'FontName','Arial');
+ylabel(c,'\Delta frequency (# edges)','Rotation',-90,'VerticalAlignment','bottom','FontSize',fsize,'FontName','Arial'); % 
+set(gcf,'color','w');
+pos = get(gcf,'Position'); set(gcf,'Position', [pos(1) pos(2) 1.5*pos(3) pos(4)]);
+print([plot_path '/cobre_rp_d_consistency_schz_pmarkers.png'],'-dpng')
 
-% transitivity
-boundedline_plot_one(1:ndens,schz.m_d_trans,schz.ci_d_trans,rgb('orangered'),alph,ppair_trans_rp_schz,'edge density \rho (%)','\Delta transitivity',[0 ndens+1],[-0.01 0.01],fsize,fsize2,...
-    plot_path,['d_trans_schz_r_vs_p_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
+%%% first column as column, with markers (overlap = 0, across densities)
+% ctrl
+cmap = colormap(redblue); close(gcf); x = ctrl.tbl_d(:,1); %data to be plotted
+min_val = -max(abs(ctrl.tbl_d(:))); max_val = max(abs(ctrl.tbl_d(:))); y = floor(((x-min_val)/(max_val-min_val))*63)+1; 
+figure; hold on; for i = 1:ndens; h = barh(i,ctrl.tbl_d(i,1)); set(h,'FaceColor',cmap(y(i),:)); end
+scatter(zeros(1,sum(ctrl.tbl_d_p(:,1)<0.01)),find(ctrl.tbl_d_p(:,1)<0.01),cex,rgb('black'),'filled','o'); hold off;
+%ax = gca; ax.YAxisLocation = 'Right'
+ylim([0 ndens+1]); xlim([-100 350]);
+set(gca,'FontSize',fsize2); %set(gca,'XTick',[1:5:(nc+1)],'XTickLabel',[(1:5:(nc+1))-1])
+ylabel('edge density \rho (%)','FontSize',fsize,'FontName','Arial');
+xlabel('\Delta freq. (# edges)','FontSize',fsize,'FontName','Arial');
+set(gcf,'color','w');
+pos = get(gcf,'Position'); set(gcf,'Position', [pos(1) pos(2) 0.5*pos(3) pos(4)]);
+print([plot_path '/cobre_rp_d_consistency_ctrl_edge0_hor.png'],'-dpng')
 
-% # components
-boundedline_plot_one(1:ndens,schz.m_d_dcmp_n,schz.ci_d_dcmp_n,rgb('orangered'),alph,ppair_dcmp_n_rp_schz,'edge density \rho (%)','\Delta # conn. comp.',[0 ndens+1],[-1.5 3.5],fsize,fsize2,...
-    plot_path,['d_dcmp_n_schz_r_vs_p_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
+% schz
+cmap = colormap(redblue); close(gcf); x = schz.tbl_d(:,1); %data to be plotted
+min_val = -max(abs(schz.tbl_d(:))); max_val = max(abs(schz.tbl_d(:))); y = floor(((x-min_val)/(max_val-min_val))*63)+1; 
+figure; hold on; for i = 1:ndens; h = barh(i,schz.tbl_d(i,1)); set(h,'FaceColor',cmap(y(i),:)); end
+scatter(zeros(1,sum(schz.tbl_d_p(:,1)<0.01)),find(schz.tbl_d_p(:,1)<0.01),cex,rgb('black'),'filled','o'); hold off;
+%ax = gca; ax.YAxisLocation = 'Right'
+ylim([0 ndens+1]); xlim([-50 550]);
+set(gca,'FontSize',fsize2); %set(gca,'XTick',[1:5:(nc+1)],'XTickLabel',[(1:5:(nc+1))-1])
+ylabel('edge density \rho (%)','FontSize',fsize,'FontName','Arial');
+xlabel('\Delta freq. (# edges)','FontSize',fsize,'FontName','Arial');
+set(gcf,'color','w');
+pos = get(gcf,'Position'); set(gcf,'Position', [pos(1) pos(2) 0.5*pos(3) pos(4)]);
+print([plot_path '/cobre_rp_d_consistency_schz_edge0_hor.png'],'-dpng')
 
-% ctrl VS schz - r-based
+%%  effect sizes for all participants
 
-% efficiency
-boundedline_plot(1:ndens,ctrl.m_eff_r,ctrl.ci_eff_r,schz.m_eff_r,schz.ci_eff_r,...
-    ctrl.col,schz.col,alph,NaN,p_eff_r,'edge density \rho (%)','efficiency','ctrl','schz',[0 ndens+1],[0 0.8],fsize,fsize2,...
-    plot_path,['eff_ctrl_vs_schz_all_rthr_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
+%%% controls have exception for density = 1, as all are significant at that density
 
-% transitivity
-boundedline_plot(1:ndens,ctrl.m_trans_r,ctrl.ci_trans_r,schz.m_trans_r,schz.ci_trans_r,...
-    ctrl.col,schz.col,alph,NaN,p_trans_r,'edge density \rho (%)','transitivity','ctrl','schz',[0 ndens+1],[0.3 0.9],fsize,fsize2,...
-    plot_path,['trans_ctrl_vs_schz_all_rthr_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
+for i = 1:1:ndens
+    i
+    % efficiency
+    [p_eff_psub1(i),r_eff_psub1(i)] =           ranksum_effect_size(ctrl.eff(ctrl.psub1_id{i},i),schz.eff(schz.psub1_id{i},i));
+    [p_eff_sig(i),r_eff_sig(i)] =               ranksum_effect_size(ctrl.eff(ctrl.sig_id{i},i),schz.eff(schz.sig_id{i},i));
+    if i > 1
+        [p_eff_ctrl_pint(i),r_eff_ctrl_pint(i)] =   ranksum_effect_size(ctrl.eff(ctrl.sig_id{i},i),ctrl.eff(setdiff(ctrl.psub1_id{i},ctrl.sig_id{i}),i));
+    end
+    [p_eff_schz_pint(i),r_eff_schz_pint(i)] =   ranksum_effect_size(schz.eff(schz.sig_id{i},i),schz.eff(setdiff(schz.psub1_id{i},schz.sig_id{i}),i));
+    
+    % efficiency normalised by random
+    [p_eff_rand_psub1(i),r_eff_rand_psub1(i)] =         ranksum_effect_size(ctrl.eff_rand(ctrl.psub1_id{i},i),schz.eff_rand(schz.psub1_id{i},i));
+    [p_eff_rand_sig(i),r_eff_rand_sig(i)] =             ranksum_effect_size(ctrl.eff_rand(ctrl.sig_id{i},i),schz.eff_rand(schz.sig_id{i},i)); % ctrl VS schz (sig only)
+    if i > 1
+        [p_eff_rand_ctrl_pint(i),r_eff_rand_ctrl_pint(i)] = ranksum_effect_size(ctrl.eff_rand(ctrl.sig_id{i},i),ctrl.eff_rand(setdiff(ctrl.psub1_id{i},ctrl.sig_id{i}),i));
+    end
+    [p_eff_rand_schz_pint(i),r_eff_rand_schz_pint(i)] = ranksum_effect_size(schz.eff_rand(schz.sig_id{i},i),schz.eff_rand(setdiff(schz.psub1_id{i},schz.sig_id{i}),i));
+    
+    % transitivity
+    [p_trans_psub1(i),r_trans_psub1(i)] =           ranksum_effect_size(ctrl.trans(ctrl.psub1_id{i},i),schz.trans(schz.psub1_id{i},i));
+    [p_trans_sig(i),r_trans_sig(i)] =               ranksum_effect_size(ctrl.trans(ctrl.sig_id{i},i),schz.trans(schz.sig_id{i},i));
+    if i > 1
+        [p_trans_ctrl_pint(i),r_trans_ctrl_pint(i)] =   ranksum_effect_size(ctrl.trans(ctrl.sig_id{i},i),ctrl.trans(setdiff(ctrl.psub1_id{i},ctrl.sig_id{i}),i));
+    end
+    [p_trans_schz_pint(i),r_trans_schz_pint(i)] =   ranksum_effect_size(schz.trans(schz.sig_id{i},i),schz.trans(setdiff(schz.psub1_id{i},schz.sig_id{i}),i));
+    
+    % transitivity normalised by random
+    [p_trans_rand_psub1(i),r_trans_rand_psub1(i)] =         ranksum_effect_size(ctrl.trans_rand(ctrl.psub1_id{i},i),schz.trans_rand(schz.psub1_id{i},i));
+    [p_trans_rand_sig(i),r_trans_rand_sig(i)] =             ranksum_effect_size(ctrl.trans_rand(ctrl.sig_id{i},i),schz.trans_rand(schz.sig_id{i},i)); % ctrl VS schz (sig only)
+    if i > 1
+        [p_trans_rand_ctrl_pint(i),r_trans_rand_ctrl_pint(i)] = ranksum_effect_size(ctrl.trans_rand(ctrl.sig_id{i},i),ctrl.trans_rand(setdiff(ctrl.psub1_id{i},ctrl.sig_id{i}),i));
+    end
+    [p_trans_rand_schz_pint(i),r_trans_rand_schz_pint(i)] = ranksum_effect_size(schz.trans_rand(schz.sig_id{i},i),schz.trans_rand(setdiff(schz.psub1_id{i},schz.sig_id{i}),i));
+   
+    % # components
+    [p_dcmp_n_psub1(i),r_dcmp_n_psub1(i)] =         ranksum_effect_size(ctrl.dcmp_n(ctrl.psub1_id{i},i),schz.dcmp_n(schz.psub1_id{i},i));
+    [p_dcmp_n_sig(i),r_dcmp_n_sig(i)] =             ranksum_effect_size(ctrl.dcmp_n(ctrl.sig_id{i},i),schz.dcmp_n(schz.sig_id{i},i));
+    if i > 1
+        [p_dcmp_n_ctrl_pint(i),r_dcmp_n_ctrl_pint(i)] = ranksum_effect_size(ctrl.dcmp_n(ctrl.sig_id{i},i),ctrl.dcmp_n(setdiff(ctrl.psub1_id{i},ctrl.sig_id{i}),i));
+    end
+    [p_dcmp_n_schz_pint(i),r_dcmp_n_schz_pint(i)] = ranksum_effect_size(schz.dcmp_n(schz.sig_id{i},i),schz.dcmp_n(setdiff(schz.psub1_id{i},schz.sig_id{i}),i));
+    
+    % mean correlation
+    [p_avg_wei_psub1(i),r_avg_wei_psub1(i)] =           ranksum_effect_size(ctrl.avg_wei_full(ctrl.psub1_id{i}),schz.avg_wei_full(schz.psub1_id{i}));
+    [p_avg_wei_sig(i),r_avg_wei_sig(i)] =               ranksum_effect_size(ctrl.avg_wei_full(ctrl.sig_id{i}),schz.avg_wei_full(schz.sig_id{i}));
+    if i > 1
+        [p_avg_wei_ctrl_pint(i),r_avg_wei_ctrl_pint(i)] =   ranksum_effect_size(ctrl.avg_wei_full(ctrl.sig_id{i}),ctrl.avg_wei_full(setdiff(ctrl.psub1_id{i},ctrl.sig_id{i})));
+    end
+    [p_avg_wei_schz_pint(i),r_avg_wei_schz_pint(i)] =   ranksum_effect_size(schz.avg_wei_full(schz.sig_id{i}),schz.avg_wei_full(setdiff(schz.psub1_id{i},schz.sig_id{i})));
+    
+    % efficiency - r VS p
+    % ctrl
+    [ppair_eff_rp_ctrl_psub1(i),rpair_eff_rp_ctrl_psub1(i)] = signrank_effect_size(ctrl.eff(ctrl.psub1_id{i},i),ctrl.eff_r(ctrl.psub1_id{i},i)); %
+    [ppair_trans_rp_ctrl_psub1(i),rpair_trans_rp_ctrl_psub1(i)] = signrank_effect_size(ctrl.trans(ctrl.psub1_id{i},i),ctrl.trans_r(ctrl.psub1_id{i},i)); %
+    
+    % schz
+    [ppair_eff_rp_schz_psub1(i),rpair_eff_rp_schz_psub1(i)] = signrank_effect_size(schz.eff(schz.psub1_id{i},i),schz.eff_r(schz.psub1_id{i},i)); % 
+    [ppair_trans_rp_schz_psub1(i),rpair_trans_rp_schz_psub1(i)] = signrank_effect_size(schz.trans(schz.psub1_id{i},i),schz.trans_r(schz.psub1_id{i},i)); % 
+    
+    % efficiency - r VS p normalised by random
+    % ctrl
+    [ppair_eff_rand_rp_ctrl_psub1(i),rpair_eff_rand_rp_ctrl_psub1(i)] = signrank_effect_size(ctrl.eff_rand(ctrl.psub1_id{i},i),ctrl.eff_r_rand(ctrl.psub1_id{i},i)); %
+    [ppair_trans_rand_rp_ctrl_psub1(i),rpair_trans_rand_rp_ctrl_psub1(i)] = signrank_effect_size(ctrl.trans_rand(ctrl.psub1_id{i},i),ctrl.trans_r_rand(ctrl.psub1_id{i},i)); %
+    
+    % schz
+    [ppair_eff_rand_rp_schz_psub1(i),rpair_eff_rand_rp_schz_psub1(i)] = signrank_effect_size(schz.eff_rand(schz.psub1_id{i},i),schz.eff_r_rand(schz.psub1_id{i},i)); % 
+    [ppair_trans_rand_rp_schz_psub1(i),rpair_trans_rand_rp_schz_psub1(i)] = signrank_effect_size(schz.trans_rand(schz.psub1_id{i},i),schz.trans_r_rand(schz.psub1_id{i},i)); % 
+    
+end
 
-% # components
-boundedline_plot(1:ndens,ctrl.m_dcmp_n_r,ctrl.ci_dcmp_n_r,schz.m_dcmp_n_r,schz.ci_dcmp_n_r,...
-    ctrl.col,schz.col,alph,NaN,p_dcmp_n_r,'edge density \rho (%)','# conn. comp.','ctrl','schz',[0 ndens+1],[0 150],fsize,fsize2,...
-    plot_path,['dcmp_n_ctrl_vs_schz_all_rthr_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
+%% format effect sizes and P values
 
-% size of largest component
-boundedline_plot(1:ndens,ctrl.m_dcmp_max_r,ctrl.ci_dcmp_max_r,schz.m_dcmp_max_r,schz.ci_dcmp_max_r,...
-    ctrl.col,schz.col,alph,NaN,p_dcmp_max_r,'edge density \rho (%)','max(comp. size)','ctrl','schz',[0 ndens+1],[200 450],fsize,fsize2,...
-    plot_path,['dcmp_max_ctrl_vs_schz_all_rthr_boundedline_sc' sc '_alpha' num2str(100*alpha)]);
+% number of significant figures
+nrr = 2; % correlation
+nrp = 2; % P value
 
+for d = 1:1:ndens
+    
+    % efficiency
+    eff_rp{d,1} = [num2str(roundsd(r_eff_psub1(d),nrr)) ' (' num2str(roundsd(p_eff_psub1(d),nrp)) ')'];
+    eff_sig_rp{d,1} = [num2str(roundsd(r_eff_sig(d),nrr)) ' (' num2str(roundsd(p_eff_sig(d),nrp)) ')'];
+    eff_ctrl_rp{d,1} = [num2str(roundsd(r_eff_ctrl_pint(d),nrr)) ' (' num2str(roundsd(p_eff_ctrl_pint(d),nrp)) ')'];
+    eff_schz_rp{d,1} = [num2str(roundsd(r_eff_schz_pint(d),nrr)) ' (' num2str(roundsd(p_eff_schz_pint(d),nrp)) ')'];
+    
+    % efficiency normalised by random
+    eff_rand_rp{d,1} = [num2str(roundsd(r_eff_rand_psub1(d),nrr)) ' (' num2str(roundsd(p_eff_rand_psub1(d),nrp)) ')'];
+    eff_rand_sig_rp{d,1} = [num2str(roundsd(r_eff_rand_sig(d),nrr)) ' (' num2str(roundsd(p_eff_rand_sig(d),nrp)) ')'];
+    eff_rand_ctrl_rp{d,1} = [num2str(roundsd(r_eff_rand_ctrl_pint(d),nrr)) ' (' num2str(roundsd(p_eff_rand_ctrl_pint(d),nrp)) ')'];
+    eff_rand_schz_rp{d,1} = [num2str(roundsd(r_eff_rand_schz_pint(d),nrr)) ' (' num2str(roundsd(p_eff_rand_schz_pint(d),nrp)) ')'];
+    
+    % transitivity
+    trans_rp{d,1} = [num2str(roundsd(r_trans_psub1(d),nrr)) ' (' num2str(roundsd(p_trans_psub1(d),nrp)) ')'];
+    trans_sig_rp{d,1} = [num2str(roundsd(r_trans_sig(d),nrr)) ' (' num2str(roundsd(p_trans_sig(d),nrp)) ')'];
+    trans_ctrl_rp{d,1} = [num2str(roundsd(r_trans_ctrl_pint(d),nrr)) ' (' num2str(roundsd(p_trans_ctrl_pint(d),nrp)) ')'];
+    trans_schz_rp{d,1} = [num2str(roundsd(r_trans_schz_pint(d),nrr)) ' (' num2str(roundsd(p_trans_schz_pint(d),nrp)) ')'];
+    
+    % transitivity normalised by random
+    trans_rand_rp{d,1} = [num2str(roundsd(r_trans_rand_psub1(d),nrr)) ' (' num2str(roundsd(p_trans_rand_psub1(d),nrp)) ')'];
+    trans_rand_sig_rp{d,1} = [num2str(roundsd(r_trans_rand_sig(d),nrr)) ' (' num2str(roundsd(p_trans_rand_sig(d),nrp)) ')'];
+    trans_rand_ctrl_rp{d,1} = [num2str(roundsd(r_trans_rand_ctrl_pint(d),nrr)) ' (' num2str(roundsd(p_trans_rand_ctrl_pint(d),nrp)) ')'];
+    trans_rand_schz_rp{d,1} = [num2str(roundsd(r_trans_rand_schz_pint(d),nrr)) ' (' num2str(roundsd(p_trans_rand_schz_pint(d),nrp)) ')'];
+    
+    % # components
+    dcmp_n_rp{d,1} = [num2str(roundsd(r_dcmp_n_psub1(d),nrr)) ' (' num2str(roundsd(p_dcmp_n_psub1(d),nrp)) ')'];
+    dcmp_n_sig_rp{d,1} = [num2str(roundsd(r_dcmp_n_sig(d),nrr)) ' (' num2str(roundsd(p_dcmp_n_sig(d),nrp)) ')'];
+    dcmp_n_ctrl_rp{d,1} = [num2str(roundsd(r_dcmp_n_ctrl_pint(d),nrr)) ' (' num2str(roundsd(p_dcmp_n_ctrl_pint(d),nrp)) ')'];
+    dcmp_n_schz_rp{d,1} = [num2str(roundsd(r_dcmp_n_schz_pint(d),nrr)) ' (' num2str(roundsd(p_dcmp_n_schz_pint(d),nrp)) ')'];
+    
+    % mean correlation
+    avg_wei_rp{d,1} = [num2str(roundsd(r_avg_wei_psub1(d),nrr)) ' (' num2str(roundsd(p_avg_wei_psub1(d),nrp)) ')'];
+    avg_wei_sig_rp{d,1} = [num2str(roundsd(r_avg_wei_sig(d),nrr)) ' (' num2str(roundsd(p_avg_wei_sig(d),nrp)) ')'];
+    avg_wei_ctrl_rp{d,1} = [num2str(roundsd(r_avg_wei_ctrl_pint(d),nrr)) ' (' num2str(roundsd(p_avg_wei_ctrl_pint(d),nrp)) ')'];
+    avg_wei_schz_rp{d,1} = [num2str(roundsd(r_avg_wei_schz_pint(d),nrr)) ' (' num2str(roundsd(p_avg_wei_schz_pint(d),nrp)) ')'];
+    
+    % paired tests
+    pair_eff_ctrl_rp{d,1} = [num2str(roundsd(rpair_eff_rp_ctrl_psub1(d),nrr)) ' (' num2str(roundsd(ppair_eff_rp_ctrl_psub1(d),nrp)) ')'];
+    pair_eff_schz_rp{d,1} = [num2str(roundsd(rpair_eff_rp_schz_psub1(d),nrr)) ' (' num2str(roundsd(ppair_eff_rp_schz_psub1(d),nrp)) ')'];
+    pair_trans_ctrl_rp{d,1} = [num2str(roundsd(rpair_trans_rp_ctrl_psub1(d),nrr)) ' (' num2str(roundsd(ppair_trans_rp_ctrl_psub1(d),nrp)) ')'];
+    pair_trans_schz_rp{d,1} = [num2str(roundsd(rpair_trans_rp_schz_psub1(d),nrr)) ' (' num2str(roundsd(ppair_trans_rp_schz_psub1(d),nrp)) ')'];
+    
+    % paired tests normalised by random
+    pair_eff_rand_ctrl_rp{d,1} = [num2str(roundsd(rpair_eff_rand_rp_ctrl_psub1(d),nrr)) ' (' num2str(roundsd(ppair_eff_rand_rp_ctrl_psub1(d),nrp)) ')'];
+    pair_eff_rand_schz_rp{d,1} = [num2str(roundsd(rpair_eff_rand_rp_schz_psub1(d),nrr)) ' (' num2str(roundsd(ppair_eff_rand_rp_schz_psub1(d),nrp)) ')'];
+    pair_trans_rand_ctrl_rp{d,1} = [num2str(roundsd(rpair_trans_rand_rp_ctrl_psub1(d),nrr)) ' (' num2str(roundsd(ppair_trans_rand_rp_ctrl_psub1(d),nrp)) ')'];
+    pair_trans_rand_schz_rp{d,1} = [num2str(roundsd(rpair_trans_rand_rp_schz_psub1(d),nrr)) ' (' num2str(roundsd(ppair_trans_rand_rp_schz_psub1(d),nrp)) ')'];
+    
+end
+
+% combine by measure
+eff_all = [eff_rp eff_sig_rp eff_ctrl_rp eff_schz_rp];
+eff_rand_all = [eff_rand_rp eff_rand_sig_rp eff_rand_ctrl_rp eff_rand_schz_rp];
+trans_all = [trans_rp trans_sig_rp trans_ctrl_rp trans_schz_rp];
+trans_rand_all = [trans_rand_rp trans_rand_sig_rp trans_rand_ctrl_rp trans_rand_schz_rp];
+dcmp_n_all = [dcmp_n_rp dcmp_n_sig_rp dcmp_n_ctrl_rp dcmp_n_schz_rp];
+avg_wei_all = [avg_wei_rp avg_wei_sig_rp avg_wei_ctrl_rp avg_wei_schz_rp];
+pair_all = [pair_eff_ctrl_rp pair_eff_schz_rp pair_trans_ctrl_rp pair_trans_schz_rp];
+pair_rand_all = [pair_eff_rand_ctrl_rp pair_eff_rand_schz_rp pair_trans_rand_ctrl_rp pair_trans_rand_schz_rp];
