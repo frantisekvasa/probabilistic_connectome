@@ -9,6 +9,7 @@ r% Code used to perform primary analyses described in the manuscript:
 % Dependencies (available at https://github.com/frantisekvasa/structural_network_development):
 %
 % ranksum_effect_size       calculates ranksum effect size using the "simple difference formula" (Kerby, Compr. Psychol. 2014)
+% signrank_effect_size      calculates signrank effect size using the "simple difference formula" (Kerby, Compr. Psychol. 2014)
 % hist_box_plot             box plot combined with histograms
 % hor_box_plot              horizontal box plot
 %
