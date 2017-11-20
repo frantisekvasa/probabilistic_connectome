@@ -1,9 +1,9 @@
-% Code used to perform primary analyses described in the manuscript: 
+r% Code used to perform primary analyses described in the manuscript: 
 %
 % "Probabilistic thresholding of functional connectomes: application to schizophrenia"
 % by Frantisek Vasa, Edward T. Bullmore and Ameera X. Patel
 %
-% Frantisek Vasa, October 2015 - August 2017
+% Frantisek Vasa, October 2015 - November 2017
 % fv247@cam.ac.uk
 %
 % Dependencies (available at https://github.com/frantisekvasa/structural_network_development):
