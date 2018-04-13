@@ -22,6 +22,7 @@ r% Code used to perform primary analyses described in the manuscript:
 % Additional dependencies: 
 %
 % Brain Connectivity Toolbox    available from: https://sites.google.com/site/bctnet/
+%                               the Brain Connectivity Toolbox contains the following functions used below: get_components, efficiency_bin, transitivity_bu
 % boundedline                   function to plot lines with confindence interval bounds, available from Matlab Central: https://uk.mathworks.com/matlabcentral/fileexchange/27485-boundedline-m
 % rgb                           color function, available from Matlab Central: https://uk.mathworks.com/matlabcentral/fileexchange/1805-rgb-m
 
